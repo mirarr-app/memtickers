@@ -214,10 +214,13 @@ object IsnetSegmenter {
         scaledMask.getPixels(scaledMaskPixels, 0, srcW, 0, 0, srcW, srcH)
         scaledMask.recycle()
 
-        // 10. Sub-pixel Alpha Feathering & Anti-Aliasing (Gaussian blur + S-curve contrast boost)
-        val featheredMaskPixels = featherAndSmoothAlpha(scaledMaskPixels, srcW, srcH, radius = 2)
+        // 10. Fast Guided Filter: edge-aware refinement snapping alpha to physical RGB luminance edges
+        val guidedMaskPixels = fastGuidedFilter(srcPixels, scaledMaskPixels, srcW, srcH, radius = 8, eps = 0.001f, subsample = 2)
 
-        // 11. Composite mask alpha with original source pixels & compute bounds
+        // 11. Sub-pixel Alpha Feathering & Anti-Aliasing (Gaussian blur + S-curve contrast boost)
+        val featheredMaskPixels = featherAndSmoothAlpha(guidedMaskPixels, srcW, srcH, radius = 1)
+
+        // 12. Composite mask alpha with original source pixels & compute bounds
         val cutoutPixels = IntArray(srcW * srcH)
         var opaqueCount = 0
         var minX = srcW
@@ -492,6 +495,144 @@ object IsnetSegmenter {
             }
         }
         return result
+    }
+
+    private fun fastGuidedFilter(
+        guideRgbPixels: IntArray,
+        maskPixels: IntArray,
+        width: Int,
+        height: Int,
+        radius: Int = 8,
+        eps: Float = 0.001f,
+        subsample: Int = 2
+    ): IntArray {
+        val subW = max(1, width / subsample)
+        val subH = max(1, height / subsample)
+        val subSize = subW * subH
+        val subR = max(1, radius / subsample)
+
+        val iSub = FloatArray(subSize)
+        val pSub = FloatArray(subSize)
+
+        for (sy in 0 until subH) {
+            val origY = sy * subsample
+            val subRow = sy * subW
+            val origRow = origY * width
+            for (sx in 0 until subW) {
+                val origX = sx * subsample
+                val pColor = guideRgbPixels[origRow + origX]
+                val r = ((pColor shr 16) and 0xFF) / 255.0f
+                val g = ((pColor shr 8) and 0xFF) / 255.0f
+                val b = (pColor and 0xFF) / 255.0f
+                iSub[subRow + sx] = 0.299f * r + 0.587f * g + 0.114f * b
+
+                val alpha = (maskPixels[origRow + origX] shr 24) and 0xFF
+                pSub[subRow + sx] = alpha / 255.0f
+            }
+        }
+
+        val iSq = FloatArray(subSize)
+        val ip = FloatArray(subSize)
+        for (i in 0 until subSize) {
+            iSq[i] = iSub[i] * iSub[i]
+            ip[i] = iSub[i] * pSub[i]
+        }
+
+        val meanI = boxFilter(iSub, subW, subH, subR)
+        val meanP = boxFilter(pSub, subW, subH, subR)
+        val corrI = boxFilter(iSq, subW, subH, subR)
+        val corrIp = boxFilter(ip, subW, subH, subR)
+
+        val a = FloatArray(subSize)
+        val b = FloatArray(subSize)
+
+        for (i in 0 until subSize) {
+            val varI = max(0.0f, corrI[i] - meanI[i] * meanI[i])
+            val covIp = corrIp[i] - meanI[i] * meanP[i]
+            val aVal = covIp / (varI + eps)
+            a[i] = aVal
+            b[i] = meanP[i] - aVal * meanI[i]
+        }
+
+        val meanA = boxFilter(a, subW, subH, subR)
+        val meanB = boxFilter(b, subW, subH, subR)
+
+        val output = IntArray(width * height)
+        for (y in 0 until height) {
+            val fy = (y.toFloat() / subsample).coerceIn(0.0f, (subH - 1).toFloat())
+            val y0 = fy.toInt()
+            val y1 = min(subH - 1, y0 + 1)
+            val dy = fy - y0
+            val row0 = y0 * subW
+            val row1 = y1 * subW
+            val outRow = y * width
+
+            for (x in 0 until width) {
+                val fx = (x.toFloat() / subsample).coerceIn(0.0f, (subW - 1).toFloat())
+                val x0 = fx.toInt()
+                val x1 = min(subW - 1, x0 + 1)
+                val dx = fx - x0
+
+                val a00 = meanA[row0 + x0]
+                val a01 = meanA[row0 + x1]
+                val a10 = meanA[row1 + x0]
+                val a11 = meanA[row1 + x1]
+                val aVal = (1 - dx) * (1 - dy) * a00 + dx * (1 - dy) * a01 + (1 - dx) * dy * a10 + dx * dy * a11
+
+                val b00 = meanB[row0 + x0]
+                val b01 = meanB[row0 + x1]
+                val b10 = meanB[row1 + x0]
+                val b11 = meanB[row1 + x1]
+                val bVal = (1 - dx) * (1 - dy) * b00 + dx * (1 - dy) * b01 + (1 - dx) * dy * b10 + dx * dy * b11
+
+                val pColor = guideRgbPixels[outRow + x]
+                val r = ((pColor shr 16) and 0xFF) / 255.0f
+                val g = ((pColor shr 8) and 0xFF) / 255.0f
+                val bColor = (pColor and 0xFF) / 255.0f
+                val lum = 0.299f * r + 0.587f * g + 0.114f * bColor
+
+                val q = (aVal * lum + bVal).coerceIn(0.0f, 1.0f)
+                val alpha = (q * 255.0f).roundToInt().coerceIn(0, 255)
+                output[outRow + x] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
+            }
+        }
+        return output
+    }
+
+    private fun boxFilter(src: FloatArray, width: Int, height: Int, radius: Int): FloatArray {
+        val total = width * height
+        val temp = FloatArray(total)
+        val dest = FloatArray(total)
+
+        for (y in 0 until height) {
+            val row = y * width
+            var sum = 0.0f
+            for (x in -radius until radius) {
+                sum += src[row + x.coerceIn(0, width - 1)]
+            }
+            for (x in 0 until width) {
+                val right = (x + radius).coerceIn(0, width - 1)
+                val left = (x - radius - 1).coerceIn(0, width - 1)
+                sum += src[row + right] - src[row + left]
+                val count = min(width - 1, x + radius) - max(0, x - radius) + 1
+                temp[row + x] = sum / count
+            }
+        }
+
+        for (x in 0 until width) {
+            var sum = 0.0f
+            for (y in -radius until radius) {
+                sum += temp[y.coerceIn(0, height - 1) * width + x]
+            }
+            for (y in 0 until height) {
+                val bottom = (y + radius).coerceIn(0, height - 1)
+                val top = (y - radius - 1).coerceIn(0, height - 1)
+                sum += temp[bottom * width + x] - temp[top * width + x]
+                val count = min(height - 1, y + radius) - max(0, y - radius) + 1
+                dest[y * width + x] = sum / count
+            }
+        }
+        return dest
     }
 
     fun close() {
