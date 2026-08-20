@@ -52,7 +52,10 @@ class _CapturePageState extends State<CapturePage> {
   CameraController? _camera;
   bool _cameraReady = false;
   bool _busy = false;
+  bool _modelReady = false;
+  bool _modelFailed = false;
   String? _status;
+  double? _progress;
   MemoryMetadata? _pendingMeta;
   Uint8List? _previewPng;
   bool _hasGps = false;
@@ -64,11 +67,40 @@ class _CapturePageState extends State<CapturePage> {
   }
 
   Future<void> _bootstrap() async {
+    unawaited(_prepareModel());
     await _prepareCamera();
     if (!mounted) return;
     if (widget.openGalleryImmediately) {
       await _pickGallery();
     }
+  }
+
+  Future<void> _prepareModel() async {
+    try {
+      await _segmenter.ensureModel(onStatus: _onCutoutStatus);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _modelFailed = true;
+        _status = error is SegmentationException
+            ? error.message
+            : 'Could not load the on-device cutout model.';
+      });
+    }
+  }
+
+  void _onCutoutStatus(CutoutStatus status) {
+    if (!mounted) return;
+    setState(() {
+      _modelReady = status.ready;
+      _modelFailed = status.failed;
+      _progress = null;
+      if (status.ready) {
+        _status = _busy ? 'Cutting the subject out…' : null;
+      } else {
+        _status = status.message;
+      }
+    });
   }
 
   Future<void> _prepareCamera() async {
@@ -147,11 +179,13 @@ class _CapturePageState extends State<CapturePage> {
   Future<void> _processFile(File file, MemoryMetadata meta) async {
     setState(() {
       _busy = true;
-      _status = 'Cutting the subject out…';
+      _status = _modelReady ? 'Cutting the subject out…' : 'Loading cutout model…';
       _previewPng = null;
     });
     try {
-      final cutout = await _segmenter.cutOut(file);
+      final cutout = await _segmenter.cutOut(file, onStatus: _onCutoutStatus);
+      if (!mounted) return;
+      setState(() => _status = 'Adding the vinyl backing…');
       final dieCut = await _processor.dieCut(cutout);
       if (!mounted) return;
       setState(() {
@@ -159,12 +193,15 @@ class _CapturePageState extends State<CapturePage> {
         _pendingMeta = meta;
         _busy = false;
         _status = null;
+        _progress = null;
+        _modelReady = true;
       });
     } on SegmentationException catch (error) {
       if (!mounted) return;
       setState(() {
         _busy = false;
         _status = null;
+        _progress = null;
       });
       _snack(error.message);
     } catch (error) {
@@ -172,18 +209,14 @@ class _CapturePageState extends State<CapturePage> {
       setState(() {
         _busy = false;
         _status = null;
+        _progress = null;
       });
-      final message = error.toString();
-      if (message.toLowerCase().contains('play') ||
-          message.toLowerCase().contains('module') ||
-          message.toLowerCase().contains('download')) {
-        _snack(
-          'Subject cutout needs Google Play services. The model may still be downloading — try again shortly.',
-        );
-      } else {
-        _snack('Could not cut out this photo. Try another one.');
-      }
+      _snack(_friendlyError(error));
     }
+  }
+
+  String _friendlyError(Object error) {
+    return 'Could not cut out this photo. Try another one.';
   }
 
   Future<void> _keep() async {
@@ -286,17 +319,9 @@ class _CapturePageState extends State<CapturePage> {
                 MdSpacing.md,
               ),
               child: _busy
-                  ? Column(
-                      children: [
-                        const M3ELoadingIndicator(
-                          semanticsLabel: 'Processing photo',
-                        ),
-                        const SizedBox(height: MdSpacing.xs),
-                        Text(
-                          _status ?? 'Working…',
-                          style: Theme.of(context).textTheme.labelLarge,
-                        ),
-                      ],
+                  ? _CaptureProgress(
+                      status: _status ?? 'Working…',
+                      progress: _progress,
                     )
                   : preview != null
                   ? Row(
@@ -320,6 +345,32 @@ class _CapturePageState extends State<CapturePage> {
                     )
                   : Column(
                       children: [
+                        if (!_modelReady && _status != null) ...[
+                          if (_modelFailed)
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: scheme.errorContainer,
+                                borderRadius: BorderRadius.circular(
+                                  MdSpacing.sm,
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(MdSpacing.sm),
+                                child: Text(
+                                  _status!,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: scheme.onErrorContainer),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            )
+                          else
+                            _CaptureProgress(
+                              status: _status!,
+                              progress: _progress,
+                            ),
+                          const SizedBox(height: MdSpacing.sm),
+                        ],
                         ActionChip(
                           avatar: Icon(
                             _hasGps ? Icons.location_on : Icons.location_off,
@@ -347,6 +398,34 @@ class _CapturePageState extends State<CapturePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CaptureProgress extends StatelessWidget {
+  const _CaptureProgress({required this.status, this.progress});
+
+  final String status;
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = progress;
+    return Column(
+      children: [
+        const M3ELoadingIndicator(semanticsLabel: 'Preparing cutout'),
+        const SizedBox(height: MdSpacing.xs),
+        Text(status, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: MdSpacing.xs),
+        M3ELinearProgressIndicator(value: percent),
+        if (percent != null) ...[
+          const SizedBox(height: MdSpacing.xxs),
+          Text(
+            '${(percent.clamp(0, 1) * 100).round()}%',
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ],
+      ],
     );
   }
 }

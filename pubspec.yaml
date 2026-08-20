@@ -13,8 +13,6 @@ dependencies:
   dynamic_color: ^1.8.1
   geocoding: ^4.0.0
   geolocator: ^14.0.2
-  google_mlkit_commons: ^0.13.0
-  google_mlkit_subject_segmentation: ^0.2.1
   image: ^4.5.4
   image_picker: ^1.2.0
   intl: ^0.20.2
@@ -34,3 +32,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/models/isnet-general-use-q8.onnx

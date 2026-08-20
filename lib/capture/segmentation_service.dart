@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:google_mlkit_subject_segmentation/google_mlkit_subject_segmentation.dart';
+import 'isnet_cutout.dart';
 
 class SegmentationException implements Exception {
   const SegmentationException(this.message);
@@ -11,39 +11,50 @@ class SegmentationException implements Exception {
   String toString() => message;
 }
 
+class CutoutStatus {
+  const CutoutStatus(this.message, {this.ready = false, this.failed = false});
+
+  final String message;
+  final bool ready;
+  final bool failed;
+}
+
 class SegmentationService {
-  SubjectSegmenter? _segmenter;
-
-  SubjectSegmenter get _client {
-    return _segmenter ??= SubjectSegmenter(
-      options: SubjectSegmenterOptions(
-        enableForegroundBitmap: true,
-        enableForegroundConfidenceMask: false,
-        enableMultipleSubjects: SubjectResultOptions(
-          enableConfidenceMask: false,
-          enableSubjectBitmap: true,
-        ),
-      ),
-    );
-  }
-
-  Future<Uint8List> cutOut(File imageFile) async {
-    final input = InputImage.fromFile(imageFile);
-    final result = await _client.processImage(input);
-
-    final bytes = result.foregroundBitmap ??
-        (result.subjects.isNotEmpty ? result.subjects.first.bitmap : null);
-
-    if (bytes == null || bytes.isEmpty) {
-      throw const SegmentationException(
-        'No subject found. Try another photo with a clearer foreground.',
+  Future<void> ensureModel({
+    void Function(CutoutStatus status)? onStatus,
+  }) async {
+    onStatus?.call(const CutoutStatus('Loading cutout model…'));
+    try {
+      await IsnetCutout.ensureLoaded();
+      onStatus?.call(const CutoutStatus('Cutout model ready', ready: true));
+    } catch (error) {
+      throw SegmentationException(
+        'Could not load the on-device cutout model. $error',
       );
     }
-    return bytes;
+  }
+
+  Future<Uint8List> cutOut(
+    File imageFile, {
+    void Function(CutoutStatus status)? onStatus,
+  }) async {
+    await ensureModel(onStatus: onStatus);
+    onStatus?.call(const CutoutStatus('Cutting the subject out…'));
+    try {
+      final cutoutFile = await IsnetCutout.removeBackgroundFile(imageFile);
+      final bytes = await cutoutFile.readAsBytes();
+      try {
+        await cutoutFile.delete();
+      } catch (_) {}
+      return bytes;
+    } on FormatException catch (error) {
+      throw SegmentationException(error.message);
+    } catch (error) {
+      throw SegmentationException('Could not cut out this photo. $error');
+    }
   }
 
   Future<void> dispose() async {
-    await _segmenter?.close();
-    _segmenter = null;
+    await IsnetCutout.dispose();
   }
 }
