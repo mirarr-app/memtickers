@@ -7,7 +7,6 @@ import 'package:m3e_core/m3e_core.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../data/sticker.dart';
-import '../theme/spacing.dart';
 
 class StickerObject extends StatefulWidget {
   const StickerObject({
@@ -119,25 +118,6 @@ class _StickerObjectState extends State<StickerObject>
                 ),
               ),
               _StickerImage(file: file, width: 168),
-              if (widget.selected)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(MdSpacing.xxs),
-                      child: Icon(
-                        Icons.check,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         ),

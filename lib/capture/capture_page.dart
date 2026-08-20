@@ -51,14 +51,15 @@ class _CapturePageState extends State<CapturePage> {
 
   CameraController? _camera;
   bool _cameraReady = false;
+  bool _takingPicture = false;
   bool _busy = false;
   bool _modelReady = false;
   bool _modelFailed = false;
   String? _status;
-  double? _progress;
   MemoryMetadata? _pendingMeta;
   Uint8List? _previewPng;
   bool _hasGps = false;
+  int _processGeneration = 0;
 
   @override
   void initState() {
@@ -94,7 +95,6 @@ class _CapturePageState extends State<CapturePage> {
     setState(() {
       _modelReady = status.ready;
       _modelFailed = status.failed;
-      _progress = null;
       if (status.ready) {
         _status = _busy ? 'Cutting the subject out…' : null;
       } else {
@@ -147,8 +147,9 @@ class _CapturePageState extends State<CapturePage> {
 
   Future<void> _shutter() async {
     final camera = _camera;
-    if (camera == null || !camera.value.isInitialized || _busy) return;
+    if (camera == null || !camera.value.isInitialized || _busy || _takingPicture) return;
     M3EHapticFeedback.medium.apply();
+    setState(() => _takingPicture = true);
     await _ensureLocationOptional();
     try {
       final shot = await camera.takePicture();
@@ -156,12 +157,13 @@ class _CapturePageState extends State<CapturePage> {
       await _processFile(File(shot.path), meta);
     } catch (error) {
       if (!mounted) return;
+      setState(() => _takingPicture = false);
       _snack(error.toString());
     }
   }
 
   Future<void> _pickGallery() async {
-    if (_busy) return;
+    if (_busy || _takingPicture) return;
     final photos = await Permission.photos.request();
     if (!photos.isGranted && !photos.isLimited) {
       final storage = await Permission.storage.request();
@@ -177,42 +179,70 @@ class _CapturePageState extends State<CapturePage> {
   }
 
   Future<void> _processFile(File file, MemoryMetadata meta) async {
+    final gen = ++_processGeneration;
+    try {
+      await _camera?.pausePreview();
+    } catch (_) {}
+
     setState(() {
       _busy = true;
+      _takingPicture = false;
       _status = _modelReady ? 'Cutting the subject out…' : 'Loading cutout model…';
       _previewPng = null;
     });
+
     try {
-      final cutout = await _segmenter.cutOut(file, onStatus: _onCutoutStatus);
-      if (!mounted) return;
+      final cutout = await _segmenter.cutOut(file, onStatus: (status) {
+        if (_processGeneration == gen) _onCutoutStatus(status);
+      });
+      if (!mounted || _processGeneration != gen) return;
+
       setState(() => _status = 'Adding the vinyl backing…');
       final dieCut = await _processor.dieCut(cutout);
-      if (!mounted) return;
+      if (!mounted || _processGeneration != gen) return;
+
       setState(() {
         _previewPng = dieCut;
         _pendingMeta = meta;
         _busy = false;
         _status = null;
-        _progress = null;
         _modelReady = true;
       });
     } on SegmentationException catch (error) {
-      if (!mounted) return;
+      if (!mounted || _processGeneration != gen) return;
+      try {
+        await _camera?.resumePreview();
+      } catch (_) {}
       setState(() {
         _busy = false;
         _status = null;
-        _progress = null;
       });
       _snack(error.message);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || _processGeneration != gen) return;
+      try {
+        await _camera?.resumePreview();
+      } catch (_) {}
       setState(() {
         _busy = false;
         _status = null;
-        _progress = null;
       });
       _snack(_friendlyError(error));
     }
+  }
+
+  void _cancelCutout() {
+    _processGeneration++;
+    try {
+      _camera?.resumePreview();
+    } catch (_) {}
+    setState(() {
+      _busy = false;
+      _takingPicture = false;
+      _status = null;
+      _previewPng = null;
+      _pendingMeta = null;
+    });
   }
 
   String _friendlyError(Object error) {
@@ -247,6 +277,9 @@ class _CapturePageState extends State<CapturePage> {
   }
 
   void _retake() {
+    try {
+      _camera?.resumePreview();
+    } catch (_) {}
     setState(() {
       _previewPng = null;
       _pendingMeta = null;
@@ -280,152 +313,147 @@ class _CapturePageState extends State<CapturePage> {
         ),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: MdSpacing.sm),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(MdSpacing.extraLarge),
-                  child: ColoredBox(
-                    color: scheme.surfaceContainerLow,
-                    child: preview != null
-                        ? Center(
-                            child: Image.memory(
-                              preview,
-                              fit: BoxFit.contain,
-                              filterQuality: FilterQuality.high,
-                            ),
-                          )
-                        : _cameraReady && _camera != null
-                        ? CameraPreview(_camera!)
-                        : Center(
-                            child: Text(
-                              'Camera unavailable. Import from gallery instead.',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: scheme.onSurfaceVariant),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
+        child: _busy
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: MdSpacing.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const M3ELoadingIndicator(semanticsLabel: 'Cutting out subject'),
+                      const SizedBox(height: MdSpacing.md),
+                      Text(
+                        _status ?? 'Cutting the subject out…',
+                        style: Theme.of(context).textTheme.titleMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: MdSpacing.xl),
+                      M3EFilledButton.tonal(
+                        size: M3EButtonSize.md,
+                        onPressed: _cancelCutout,
+                        child: const Text('Cancel'),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                MdSpacing.sm,
-                MdSpacing.sm,
-                MdSpacing.sm,
-                MdSpacing.md,
-              ),
-              child: _busy
-                  ? _CaptureProgress(
-                      status: _status ?? 'Working…',
-                      progress: _progress,
-                    )
-                  : preview != null
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: M3EFilledButton.tonal(
-                            size: M3EButtonSize.md,
-                            onPressed: _retake,
-                            child: const Text('Retake'),
-                          ),
-                        ),
-                        const SizedBox(width: MdSpacing.xs),
-                        Expanded(
-                          child: M3EFilledButton(
-                            size: M3EButtonSize.lg,
-                            onPressed: _keep,
-                            child: const Text('Keep sticker'),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      children: [
-                        if (!_modelReady && _status != null) ...[
-                          if (_modelFailed)
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: scheme.errorContainer,
-                                borderRadius: BorderRadius.circular(
-                                  MdSpacing.sm,
+              )
+            : Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: MdSpacing.sm),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(MdSpacing.extraLarge),
+                        child: ColoredBox(
+                          color: scheme.surfaceContainerLow,
+                          child: preview != null
+                              ? Center(
+                                  child: Image.memory(
+                                    preview,
+                                    fit: BoxFit.contain,
+                                    filterQuality: FilterQuality.high,
+                                  ),
+                                )
+                              : _cameraReady && _camera != null
+                              ? CameraPreview(_camera!)
+                              : Center(
+                                  child: Text(
+                                    'Camera unavailable. Import from gallery instead.',
+                                    style: Theme.of(context).textTheme.bodyMedium
+                                        ?.copyWith(color: scheme.onSurfaceVariant),
+                                    textAlign: TextAlign.center,
+                                  ),
                                 ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(MdSpacing.sm),
-                                child: Text(
-                                  _status!,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: scheme.onErrorContainer),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            )
-                          else
-                            _CaptureProgress(
-                              status: _status!,
-                              progress: _progress,
-                            ),
-                          const SizedBox(height: MdSpacing.sm),
-                        ],
-                        ActionChip(
-                          avatar: Icon(
-                            _hasGps ? Icons.location_on : Icons.location_off,
-                            size: 18,
-                          ),
-                          label: Text(_hasGps ? 'Location on' : 'Location off'),
-                          onPressed: _ensureLocationOptional,
                         ),
-                        const SizedBox(height: MdSpacing.sm),
-                        M3EFilledButton(
-                          size: M3EButtonSize.xl,
-                          onPressed: _cameraReady ? _shutter : null,
-                          semanticLabel: 'Shutter',
-                          child: const Icon(Icons.camera_alt),
-                        ),
-                        const SizedBox(height: MdSpacing.xs),
-                        M3EFilledButton.tonal(
-                          size: M3EButtonSize.md,
-                          onPressed: _pickGallery,
-                          child: const Text('Gallery'),
-                        ),
-                      ],
+                      ),
                     ),
-            ),
-          ],
-        ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      MdSpacing.sm,
+                      MdSpacing.sm,
+                      MdSpacing.sm,
+                      MdSpacing.md,
+                    ),
+                    child: preview != null
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: M3EFilledButton.tonal(
+                                  size: M3EButtonSize.md,
+                                  onPressed: _retake,
+                                  child: const Text('Retake'),
+                                ),
+                              ),
+                              const SizedBox(width: MdSpacing.xs),
+                              Expanded(
+                                child: M3EFilledButton(
+                                  size: M3EButtonSize.lg,
+                                  onPressed: _keep,
+                                  child: const Text('Keep sticker'),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            children: [
+                              if (!_modelReady && _status != null && _modelFailed) ...[
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: scheme.errorContainer,
+                                    borderRadius: BorderRadius.circular(
+                                      MdSpacing.sm,
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(MdSpacing.sm),
+                                    child: Text(
+                                      _status!,
+                                      style: Theme.of(context).textTheme.bodyMedium
+                                          ?.copyWith(color: scheme.onErrorContainer),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: MdSpacing.sm),
+                              ],
+                              ActionChip(
+                                avatar: Icon(
+                                  _hasGps ? Icons.location_on : Icons.location_off,
+                                  size: 18,
+                                ),
+                                label: Text(_hasGps ? 'Location on' : 'Location off'),
+                                onPressed: _ensureLocationOptional,
+                              ),
+                              const SizedBox(height: MdSpacing.sm),
+                              M3EFilledButton(
+                                size: M3EButtonSize.xl,
+                                onPressed: (_cameraReady && !_takingPicture) ? _shutter : null,
+                                semanticLabel: 'Shutter',
+                                child: _takingPicture
+                                    ? SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          color: scheme.onPrimary,
+                                        ),
+                                      )
+                                    : const Icon(Icons.camera_alt),
+                              ),
+                              const SizedBox(height: MdSpacing.xs),
+                              M3EFilledButton.tonal(
+                                size: M3EButtonSize.md,
+                                onPressed: !_takingPicture ? _pickGallery : null,
+                                child: const Text('Gallery'),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
       ),
-    );
-  }
-}
-
-class _CaptureProgress extends StatelessWidget {
-  const _CaptureProgress({required this.status, this.progress});
-
-  final String status;
-  final double? progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final percent = progress;
-    return Column(
-      children: [
-        const M3ELoadingIndicator(semanticsLabel: 'Preparing cutout'),
-        const SizedBox(height: MdSpacing.xs),
-        Text(status, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: MdSpacing.xs),
-        M3ELinearProgressIndicator(value: percent),
-        if (percent != null) ...[
-          const SizedBox(height: MdSpacing.xxs),
-          Text(
-            '${(percent.clamp(0, 1) * 100).round()}%',
-            style: Theme.of(context).textTheme.labelSmall,
-          ),
-        ],
-      ],
     );
   }
 }
