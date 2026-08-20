@@ -45,7 +45,7 @@ class StickerProcessor {
     for (var y = 0; y < src.height; y++) {
       for (var x = 0; x < src.width; x++) {
         final pixel = src.getPixel(x, y);
-        if (pixel.a < 24) continue;
+        if (pixel.a < 32) continue;
         for (var dy = -borderRadius; dy <= borderRadius; dy++) {
           for (var dx = -borderRadius; dx <= borderRadius; dx++) {
             if (dx * dx + dy * dy > r2) continue;

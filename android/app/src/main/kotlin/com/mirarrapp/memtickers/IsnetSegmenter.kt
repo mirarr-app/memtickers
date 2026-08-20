@@ -170,7 +170,7 @@ object IsnetSegmenter {
             inputTensor.close()
         }
 
-        // 6. Normalize mask min-max to 0..255
+        // 6. Normalize mask min-max with low-confidence suppression & smoothstep
         var minVal = Float.MAX_VALUE
         var maxVal = -Float.MAX_VALUE
         for (v in maskFloats) {
@@ -178,15 +178,32 @@ object IsnetSegmenter {
             if (v > maxVal) maxVal = v
         }
         val range = max(maxVal - minVal, 1e-6f)
-        val maskPixels = IntArray(planeSize)
+        val rawMaskPixels = IntArray(planeSize)
+        val cutoffLow = 0.20f
+        val cutoffHigh = 0.85f
         for (i in 0 until planeSize) {
-            val norm = (((maskFloats[i] - minVal) / range) * 255.0f).roundToInt().coerceIn(0, 255)
-            maskPixels[i] = (norm shl 24) or (norm shl 16) or (norm shl 8) or norm
+            val rawNorm = (maskFloats[i] - minVal) / range
+            val norm = when {
+                rawNorm < cutoffLow -> 0.0f
+                rawNorm > cutoffHigh -> 1.0f
+                else -> {
+                    val u = (rawNorm - cutoffLow) / (cutoffHigh - cutoffLow)
+                    u * u * (3.0f - 2.0f * u) // smoothstep
+                }
+            }
+            val alpha = (norm * 255.0f).roundToInt().coerceIn(0, 255)
+            rawMaskPixels[i] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
         }
 
-        val mask1024 = Bitmap.createBitmap(maskPixels, MODEL_SIZE, MODEL_SIZE, Bitmap.Config.ARGB_8888)
+        // 7. Morphological Opening (Erode r=1, Dilate r=1) to eliminate single-pixel wisps and noise
+        val openedMaskPixels = morphologicalOpening(rawMaskPixels, MODEL_SIZE, MODEL_SIZE, radius = 1)
 
-        // 7. Scale mask back to source image size
+        // 8. Connected Component Analysis: keep primary subject and prune small detached junk islands
+        val cleanedMaskPixels = pruneDisconnectedIslands(openedMaskPixels, MODEL_SIZE, MODEL_SIZE, alphaThreshold = 24)
+
+        val mask1024 = Bitmap.createBitmap(cleanedMaskPixels, MODEL_SIZE, MODEL_SIZE, Bitmap.Config.ARGB_8888)
+
+        // 9. Scale mask back to source image size
         val scaledMask = Bitmap.createScaledBitmap(mask1024, srcW, srcH, true)
         mask1024.recycle()
 
@@ -294,6 +311,130 @@ object IsnetSegmenter {
         val scaled = Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
         if (scaled != bitmap) bitmap.recycle()
         return scaled
+    }
+
+    private fun morphologicalOpening(mask: IntArray, width: Int, height: Int, radius: Int = 1): IntArray {
+        val eroded = IntArray(mask.size)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                var minA = 255
+                for (dy in -radius..radius) {
+                    val ny = y + dy
+                    if (ny !in 0 until height) { minA = 0; break }
+                    val rowOffset = ny * width
+                    for (dx in -radius..radius) {
+                        val nx = x + dx
+                        if (nx !in 0 until width) { minA = 0; break }
+                        val a = (mask[rowOffset + nx] shr 24) and 0xFF
+                        if (a < minA) minA = a
+                    }
+                    if (minA == 0) break
+                }
+                eroded[y * width + x] = (minA shl 24) or (minA shl 16) or (minA shl 8) or minA
+            }
+        }
+
+        val opened = IntArray(mask.size)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                var maxA = 0
+                for (dy in -radius..radius) {
+                    val ny = y + dy
+                    if (ny !in 0 until height) continue
+                    val rowOffset = ny * width
+                    for (dx in -radius..radius) {
+                        val nx = x + dx
+                        if (nx !in 0 until width) continue
+                        val a = (eroded[rowOffset + nx] shr 24) and 0xFF
+                        if (a > maxA) maxA = a
+                    }
+                    if (maxA == 255) break
+                }
+                opened[y * width + x] = (maxA shl 24) or (maxA shl 16) or (maxA shl 8) or maxA
+            }
+        }
+        return opened
+    }
+
+    private fun pruneDisconnectedIslands(
+        maskPixels: IntArray,
+        width: Int,
+        height: Int,
+        alphaThreshold: Int = 24
+    ): IntArray {
+        val total = width * height
+        val labels = IntArray(total)
+        val componentSizes = ArrayList<Int>()
+        val queue = IntArray(total)
+
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val idx = y * width + x
+                val a = (maskPixels[idx] shr 24) and 0xFF
+                if (a >= alphaThreshold && labels[idx] == 0) {
+                    val labelId = componentSizes.size + 1
+                    var head = 0
+                    var tail = 0
+                    var count = 0
+
+                    queue[tail++] = idx
+                    labels[idx] = labelId
+
+                    while (head < tail) {
+                        val cur = queue[head++]
+                        count++
+                        val cx = cur % width
+                        val cy = cur / width
+
+                        if (cx > 0) {
+                            val n = cur - 1
+                            if (labels[n] == 0 && ((maskPixels[n] shr 24) and 0xFF) >= alphaThreshold) {
+                                labels[n] = labelId
+                                queue[tail++] = n
+                            }
+                        }
+                        if (cx < width - 1) {
+                            val n = cur + 1
+                            if (labels[n] == 0 && ((maskPixels[n] shr 24) and 0xFF) >= alphaThreshold) {
+                                labels[n] = labelId
+                                queue[tail++] = n
+                            }
+                        }
+                        if (cy > 0) {
+                            val n = cur - width
+                            if (labels[n] == 0 && ((maskPixels[n] shr 24) and 0xFF) >= alphaThreshold) {
+                                labels[n] = labelId
+                                queue[tail++] = n
+                            }
+                        }
+                        if (cy < height - 1) {
+                            val n = cur + width
+                            if (labels[n] == 0 && ((maskPixels[n] shr 24) and 0xFF) >= alphaThreshold) {
+                                labels[n] = labelId
+                                queue[tail++] = n
+                            }
+                        }
+                    }
+                    componentSizes.add(count)
+                }
+            }
+        }
+
+        if (componentSizes.isEmpty()) return maskPixels
+
+        val maxComponentSize = componentSizes.maxOrNull() ?: 0
+        val minAllowedSize = max(2000, (maxComponentSize * 0.12f).roundToInt())
+
+        val result = IntArray(total)
+        for (i in 0 until total) {
+            val lbl = labels[i]
+            if (lbl > 0 && componentSizes[lbl - 1] >= minAllowedSize) {
+                result[i] = maskPixels[i]
+            } else {
+                result[i] = 0
+            }
+        }
+        return result
     }
 
     fun close() {
