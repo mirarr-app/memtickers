@@ -195,8 +195,8 @@ object IsnetSegmenter {
             rawMaskPixels[i] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
         }
 
-        // 7. Morphological Opening (Erode r=1, Dilate r=1) to eliminate single-pixel wisps and noise
-        val openedMaskPixels = morphologicalOpening(rawMaskPixels, MODEL_SIZE, MODEL_SIZE, radius = 1)
+        // 7. Morphological Opening (Circular Erode r=1.5, Dilate r=1.5) to eliminate single-pixel wisps and noise
+        val openedMaskPixels = morphologicalOpening(rawMaskPixels, MODEL_SIZE, MODEL_SIZE, radius = 1.5f)
 
         // 8. Connected Component Analysis: keep primary subject and prune small detached junk islands
         val cleanedMaskPixels = pruneDisconnectedIslands(openedMaskPixels, MODEL_SIZE, MODEL_SIZE, alphaThreshold = 24)
@@ -214,7 +214,10 @@ object IsnetSegmenter {
         scaledMask.getPixels(scaledMaskPixels, 0, srcW, 0, 0, srcW, srcH)
         scaledMask.recycle()
 
-        // 8. Composite mask alpha with original source pixels & compute bounds
+        // 10. Sub-pixel Alpha Feathering & Anti-Aliasing (Gaussian blur + S-curve contrast boost)
+        val featheredMaskPixels = featherAndSmoothAlpha(scaledMaskPixels, srcW, srcH, radius = 2)
+
+        // 11. Composite mask alpha with original source pixels & compute bounds
         val cutoutPixels = IntArray(srcW * srcH)
         var opaqueCount = 0
         var minX = srcW
@@ -225,7 +228,7 @@ object IsnetSegmenter {
         for (y in 0 until srcH) {
             for (x in 0 until srcW) {
                 val idx = y * srcW + x
-                val alpha = (scaledMaskPixels[idx] shr 24) and 0xFF
+                val alpha = (featheredMaskPixels[idx] shr 24) and 0xFF
                 if (alpha > 24) {
                     opaqueCount++
                     if (x < minX) minX = x
@@ -313,47 +316,101 @@ object IsnetSegmenter {
         return scaled
     }
 
-    private fun morphologicalOpening(mask: IntArray, width: Int, height: Int, radius: Int = 1): IntArray {
+    private fun morphologicalOpening(mask: IntArray, width: Int, height: Int, radius: Float = 1.5f): IntArray {
+        val rInt = radius.toInt().coerceAtLeast(1)
+        val r2 = radius * radius
         val eroded = IntArray(mask.size)
+
         for (y in 0 until height) {
+            val rowOffset = y * width
             for (x in 0 until width) {
                 var minA = 255
-                for (dy in -radius..radius) {
+                for (dy in -rInt..rInt) {
                     val ny = y + dy
                     if (ny !in 0 until height) { minA = 0; break }
-                    val rowOffset = ny * width
-                    for (dx in -radius..radius) {
+                    val nRowOffset = ny * width
+                    for (dx in -rInt..rInt) {
+                        if (dx * dx + dy * dy > r2) continue
                         val nx = x + dx
                         if (nx !in 0 until width) { minA = 0; break }
-                        val a = (mask[rowOffset + nx] shr 24) and 0xFF
+                        val a = (mask[nRowOffset + nx] shr 24) and 0xFF
                         if (a < minA) minA = a
                     }
                     if (minA == 0) break
                 }
-                eroded[y * width + x] = (minA shl 24) or (minA shl 16) or (minA shl 8) or minA
+                eroded[rowOffset + x] = (minA shl 24) or (minA shl 16) or (minA shl 8) or minA
             }
         }
 
         val opened = IntArray(mask.size)
         for (y in 0 until height) {
+            val rowOffset = y * width
             for (x in 0 until width) {
                 var maxA = 0
-                for (dy in -radius..radius) {
+                for (dy in -rInt..rInt) {
                     val ny = y + dy
                     if (ny !in 0 until height) continue
-                    val rowOffset = ny * width
-                    for (dx in -radius..radius) {
+                    val nRowOffset = ny * width
+                    for (dx in -rInt..rInt) {
+                        if (dx * dx + dy * dy > r2) continue
                         val nx = x + dx
                         if (nx !in 0 until width) continue
-                        val a = (eroded[rowOffset + nx] shr 24) and 0xFF
+                        val a = (eroded[nRowOffset + nx] shr 24) and 0xFF
                         if (a > maxA) maxA = a
                     }
                     if (maxA == 255) break
                 }
-                opened[y * width + x] = (maxA shl 24) or (maxA shl 16) or (maxA shl 8) or maxA
+                opened[rowOffset + x] = (maxA shl 24) or (maxA shl 16) or (maxA shl 8) or maxA
             }
         }
         return opened
+    }
+
+    private fun featherAndSmoothAlpha(mask: IntArray, width: Int, height: Int, radius: Int = 2): IntArray {
+        val total = width * height
+        val temp = FloatArray(total)
+        val smoothed = IntArray(total)
+
+        // 1D Gaussian kernel weights for radius = 2
+        val weights = floatArrayOf(0.06136f, 0.24477f, 0.38774f, 0.24477f, 0.06136f)
+
+        // Horizontal blur pass
+        for (y in 0 until height) {
+            val row = y * width
+            for (x in 0 until width) {
+                var sum = 0f
+                for (k in -2..2) {
+                    val nx = (x + k).coerceIn(0, width - 1)
+                    val a = ((mask[row + nx] shr 24) and 0xFF).toFloat()
+                    sum += a * weights[k + 2]
+                }
+                temp[row + x] = sum
+            }
+        }
+
+        // Vertical blur pass + smoothstep edge contrast restoration
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                var sum = 0f
+                for (k in -2..2) {
+                    val ny = (y + k).coerceIn(0, height - 1)
+                    sum += temp[ny * width + x] * weights[k + 2]
+                }
+                val norm = sum / 255.0f
+                val refined = when {
+                    norm <= 0.08f -> 0.0f
+                    norm >= 0.92f -> 1.0f
+                    else -> {
+                        val t = (norm - 0.08f) / 0.84f
+                        t * t * (3.0f - 2.0f * t)
+                    }
+                }
+                val alpha = (refined * 255.0f).roundToInt().coerceIn(0, 255)
+                val idx = y * width + x
+                smoothed[idx] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
+            }
+        }
+        return smoothed
     }
 
     private fun pruneDisconnectedIslands(

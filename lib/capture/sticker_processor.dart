@@ -40,22 +40,47 @@ class StickerProcessor {
     const creamR = 250;
     const creamG = 245;
     const creamB = 235;
-    final r2 = borderRadius * borderRadius;
+
+    final maxDist = borderRadius + 0.5;
+    final maxDist2 = (maxDist + 1.0) * (maxDist + 1.0);
+    final borderLimit = borderRadius + 1;
+
+    // Buffer to track sub-pixel anti-aliased alpha for vinyl backing
+    final backingAlpha = Uint8List(out.width * out.height);
 
     for (var y = 0; y < src.height; y++) {
       for (var x = 0; x < src.width; x++) {
         final pixel = src.getPixel(x, y);
         if (pixel.a < 32) continue;
-        for (var dy = -borderRadius; dy <= borderRadius; dy++) {
-          for (var dx = -borderRadius; dx <= borderRadius; dx++) {
-            if (dx * dx + dy * dy > r2) continue;
+        final srcA = pixel.a / 255.0;
+        for (var dy = -borderLimit; dy <= borderLimit; dy++) {
+          for (var dx = -borderLimit; dx <= borderLimit; dx++) {
+            final d2 = (dx * dx + dy * dy).toDouble();
+            if (d2 > maxDist2) continue;
+            final dist = math.sqrt(d2);
+            final coverage = (maxDist - dist).clamp(0.0, 1.0);
+            if (coverage <= 0) continue;
+
             final ox = x + pad + dx;
             final oy = y + pad + dy;
             if (ox < 0 || oy < 0 || ox >= out.width || oy >= out.height) {
               continue;
             }
-            out.setPixelRgba(ox, oy, creamR, creamG, creamB, 255);
+            final a = (coverage * srcA * 255).round().clamp(0, 255);
+            final idx = oy * out.width + ox;
+            if (a > backingAlpha[idx]) {
+              backingAlpha[idx] = a;
+            }
           }
+        }
+      }
+    }
+
+    for (var y = 0; y < out.height; y++) {
+      for (var x = 0; x < out.width; x++) {
+        final a = backingAlpha[y * out.width + x];
+        if (a > 0) {
+          out.setPixelRgba(x, y, creamR, creamG, creamB, a);
         }
       }
     }
@@ -63,15 +88,37 @@ class StickerProcessor {
     for (var y = 0; y < src.height; y++) {
       for (var x = 0; x < src.width; x++) {
         final pixel = src.getPixel(x, y);
-        if (pixel.a == 0) continue;
-        out.setPixelRgba(
-          x + pad,
-          y + pad,
-          pixel.r.toInt(),
-          pixel.g.toInt(),
-          pixel.b.toInt(),
-          pixel.a.toInt(),
-        );
+        final srcA = pixel.a.toInt();
+        if (srcA == 0) continue;
+        final ox = x + pad;
+        final oy = y + pad;
+        if (srcA >= 250) {
+          out.setPixelRgba(
+            ox,
+            oy,
+            pixel.r.toInt(),
+            pixel.g.toInt(),
+            pixel.b.toInt(),
+            255,
+          );
+        } else {
+          final fgA = srcA / 255.0;
+          final bgA = (backingAlpha[oy * out.width + ox] / 255.0) * (1.0 - fgA);
+          final finalA = fgA + bgA;
+          if (finalA > 0) {
+            final r = ((pixel.r * fgA + creamR * bgA) / finalA).round().clamp(0, 255);
+            final g = ((pixel.g * fgA + creamG * bgA) / finalA).round().clamp(0, 255);
+            final b = ((pixel.b * fgA + creamB * bgA) / finalA).round().clamp(0, 255);
+            out.setPixelRgba(
+              ox,
+              oy,
+              r,
+              g,
+              b,
+              (finalA * 255).round().clamp(0, 255),
+            );
+          }
+        }
       }
     }
 
