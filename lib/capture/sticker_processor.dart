@@ -125,6 +125,37 @@ class StickerProcessor {
     return Uint8List.fromList(img.encodePng(out));
   }
 
+  /// Applies saturation and brightness adjustments to a PNG sticker image.
+  Future<Uint8List> applyColorAdjustments(
+    Uint8List sourceBytes, {
+    required double saturation,
+    required double brightness,
+  }) {
+    if ((saturation - 1.0).abs() < 0.001 && (brightness - 1.0).abs() < 0.001) {
+      return Future.value(sourceBytes);
+    }
+    return compute(StickerProcessor.applyColorAdjustmentsSync, (
+      bytes: sourceBytes,
+      saturation: saturation,
+      brightness: brightness,
+    ));
+  }
+
+  static Uint8List applyColorAdjustmentsSync(
+    ({Uint8List bytes, double saturation, double brightness}) args,
+  ) {
+    final decoded = img.decodeImage(args.bytes);
+    if (decoded == null) {
+      return args.bytes;
+    }
+    final adjusted = img.adjustColor(
+      decoded,
+      saturation: args.saturation,
+      brightness: args.brightness,
+    );
+    return Uint8List.fromList(img.encodePng(adjusted));
+  }
+
   Future<File> writePng(Uint8List bytes, String path) async {
     final file = File(path);
     await file.writeAsBytes(bytes, flush: true);

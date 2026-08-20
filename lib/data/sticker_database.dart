@@ -30,6 +30,20 @@ CREATE TABLE stickers (
   zIndex INTEGER NOT NULL
 )
 ''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)
+''');
+      },
+      onOpen: (db) async {
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)
+''');
       },
     );
     return _db!;

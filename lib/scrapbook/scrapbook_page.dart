@@ -5,6 +5,7 @@ import '../capture/capture_page.dart';
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../details/sticker_details_sheet.dart';
+import '../settings/sticker_settings_sheet.dart';
 import '../theme/spacing.dart';
 import 'scrapbook_canvas.dart';
 
@@ -73,6 +74,13 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
     );
   }
 
+  void _openSettings() {
+    showStickerSettings(
+      context: context,
+      repository: widget.repository,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -81,7 +89,6 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
     final margin = compact ? MdSpacing.compactMargin : MdSpacing.mediumMargin;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Memtickers')),
       body: Stack(
         children: [
           Positioned.fill(
@@ -156,6 +163,14 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                         _openCapture(gallery: true);
                       },
                       icon: const Icon(Icons.photo_library_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Settings',
+                      onPressed: () {
+                        M3EHapticFeedback.medium.apply();
+                        _openSettings();
+                      },
+                      icon: const Icon(Icons.settings_outlined),
                     ),
                   ],
                 ),

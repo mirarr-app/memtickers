@@ -201,8 +201,16 @@ class _CapturePageState extends State<CapturePage> {
       final dieCut = await _processor.dieCut(cutout);
       if (!mounted || _processGeneration != gen) return;
 
+      final settings = widget.repository.settings;
+      final finalPng = await _processor.applyColorAdjustments(
+        dieCut,
+        saturation: settings.saturation,
+        brightness: settings.brightness,
+      );
+      if (!mounted || _processGeneration != gen) return;
+
       setState(() {
-        _previewPng = dieCut;
+        _previewPng = finalPng;
         _pendingMeta = meta;
         _busy = false;
         _status = null;

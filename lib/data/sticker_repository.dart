@@ -7,12 +7,15 @@ import 'package:sqflite/sqflite.dart';
 
 import 'sticker.dart';
 import 'sticker_database.dart';
+import 'sticker_settings.dart';
 
 class StickerRepository extends ChangeNotifier {
   final List<Sticker> _stickers = [];
+  StickerSettings _settings = const StickerSettings();
   Directory? _imagesDir;
 
   List<Sticker> get stickers => List.unmodifiable(_stickers);
+  StickerSettings get settings => _settings;
 
   Future<void> init() async {
     final docs = await getApplicationDocumentsDirectory();
@@ -25,6 +28,36 @@ class StickerRepository extends ChangeNotifier {
     _stickers
       ..clear()
       ..addAll(rows.map(Sticker.fromMap));
+
+    try {
+      final settingsRows = await db.query('settings');
+      final settingsMap = <String, dynamic>{};
+      for (final row in settingsRows) {
+        final key = row['key'] as String;
+        final val = double.tryParse(row['value'] as String);
+        if (val != null) {
+          settingsMap[key] = val;
+        }
+      }
+      _settings = StickerSettings.fromMap(settingsMap);
+    } catch (_) {}
+
+    notifyListeners();
+  }
+
+  Future<void> updateSettings(StickerSettings newSettings) async {
+    _settings = newSettings;
+    final db = await StickerDatabase.instance();
+    await db.insert(
+      'settings',
+      {'key': 'saturation', 'value': newSettings.saturation.toString()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    await db.insert(
+      'settings',
+      {'key': 'brightness', 'value': newSettings.brightness.toString()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     notifyListeners();
   }
 
