@@ -220,67 +220,6 @@ class _ScrapbookPageState extends State<ScrapbookPage>
             ),
           ),
 
-          // Active Board Pill Indicator (Top Left)
-          if (!isSearching)
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + MdSpacing.xs,
-              left: margin,
-              child: Material(
-                elevation: 3,
-                shadowColor: scheme.shadow.withValues(alpha: 0.18),
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.92),
-                borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
-                  onTap: () {
-                    M3EHapticFeedback.light.apply();
-                    _openBoards();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: MdSpacing.sm,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.dashboard_customize_rounded,
-                          size: 16,
-                          color: scheme.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 160),
-                          child: Text(
-                            activeBoard.name,
-                            style: textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurface,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          size: 16,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
           // Active Search Status Banner
           if (isSearching)
             Positioned(
