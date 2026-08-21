@@ -61,6 +61,7 @@ class _CapturePageState extends State<CapturePage> {
   Uint8List? _previewPng;
   final Set<String> _selectedTags = <String>{};
   bool _hasGps = false;
+  bool _isFromGallery = false;
   int _processGeneration = 0;
 
   @override
@@ -163,7 +164,7 @@ class _CapturePageState extends State<CapturePage> {
     try {
       final shot = await camera.takePicture();
       final meta = await _metadata.fromLiveCapture();
-      await _processFile(File(shot.path), meta);
+      await _processFile(File(shot.path), meta, isFromGallery: false);
     } catch (error) {
       if (!mounted) return;
       setState(() => _takingPicture = false);
@@ -184,10 +185,14 @@ class _CapturePageState extends State<CapturePage> {
     final file = await _picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
     final meta = await _metadata.fromGalleryFile(file.path);
-    await _processFile(File(file.path), meta);
+    await _processFile(File(file.path), meta, isFromGallery: true);
   }
 
-  Future<void> _processFile(File file, MemoryMetadata meta) async {
+  Future<void> _processFile(
+    File file,
+    MemoryMetadata meta, {
+    required bool isFromGallery,
+  }) async {
     final gen = ++_processGeneration;
     try {
       await _camera?.pausePreview();
@@ -201,6 +206,7 @@ class _CapturePageState extends State<CapturePage> {
           : 'Loading cutout model\u2026';
       _previewPng = null;
       _selectedTags.clear();
+      _isFromGallery = isFromGallery;
     });
 
     try {
@@ -317,7 +323,8 @@ class _CapturePageState extends State<CapturePage> {
     Navigator.of(context).pop(CaptureResult(sticker: sticker, pngBytes: png));
   }
 
-  void _retake() {
+  Future<void> _retake() async {
+    final wasFromGallery = _isFromGallery;
     try {
       _camera?.resumePreview();
     } catch (_) {}
@@ -326,6 +333,9 @@ class _CapturePageState extends State<CapturePage> {
       _pendingMeta = null;
       _selectedTags.clear();
     });
+    if (wasFromGallery) {
+      await _pickGallery();
+    }
   }
 
   void _snack(String message) {
