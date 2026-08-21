@@ -68,6 +68,7 @@ class MetadataService {
 
   Future<String?> _placeLabel(double lat, double lng) async {
     try {
+      await setLocaleIdentifier('en_US');
       final marks = await placemarkFromCoordinates(lat, lng);
       if (marks.isEmpty) return null;
       final mark = marks.first;
