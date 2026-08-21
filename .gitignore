@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# AI and Agent Rules
+AGENTS.md
+.cursor/rules/
