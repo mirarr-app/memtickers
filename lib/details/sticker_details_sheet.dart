@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
@@ -58,13 +59,47 @@ Future<void> showStickerDetails({
 }
 
 class _StickerDetailsBody extends StatelessWidget {
-  const _StickerDetailsBody({
-    required this.sticker,
-    required this.repository,
-  });
+  const _StickerDetailsBody({required this.sticker, required this.repository});
 
   final Sticker sticker;
   final StickerRepository repository;
+
+  Future<void> _openInMaps(BuildContext context) async {
+    final hasCoords = sticker.latitude != null && sticker.longitude != null;
+    if (!hasCoords &&
+        (sticker.placeLabel == null || sticker.placeLabel!.isEmpty)) {
+      return;
+    }
+
+    final query = hasCoords
+        ? '${sticker.latitude},${sticker.longitude}'
+        : sticker.placeLabel!;
+    final label = sticker.placeLabel ?? query;
+
+    final uri = hasCoords
+        ? Uri.parse(
+            'geo:${sticker.latitude},${sticker.longitude}?q=${sticker.latitude},${sticker.longitude}(${Uri.encodeComponent(label)})',
+          )
+        : Uri.parse('geo:0,0?q=${Uri.encodeComponent(label)}');
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        final fallback = Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}',
+        );
+        await launchUrl(fallback, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      final fallback = Uri.parse(
+        'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(query)}',
+      );
+      await launchUrl(fallback, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,15 +109,26 @@ class _StickerDetailsBody extends StatelessWidget {
 
     final date = DateFormat.yMMMEd().format(sticker.createdAt);
     final time = DateFormat.jm().format(sticker.createdAt);
-    final place = sticker.placeLabel ??
+    final hasLocation =
+        sticker.latitude != null ||
+        sticker.longitude != null ||
+        (sticker.placeLabel != null && sticker.placeLabel!.isNotEmpty);
+
+    final place =
+        sticker.placeLabel ??
         (sticker.latitude != null && sticker.longitude != null
             ? '${sticker.latitude!.toStringAsFixed(4)}, ${sticker.longitude!.toStringAsFixed(4)}'
             : 'Location not recorded');
 
     final rows = [
-      ('Place', place, Icons.place_rounded),
-      ('Date', date, Icons.calendar_today_rounded),
-      ('Time', time, Icons.schedule_rounded),
+      (
+        'Place',
+        place,
+        Icons.place_rounded,
+        hasLocation ? () => _openInMaps(context) : null,
+      ),
+      ('Date', date, Icons.calendar_today_rounded, null),
+      ('Time', time, Icons.schedule_rounded, null),
     ];
 
     return Padding(
@@ -111,10 +157,7 @@ class _StickerDetailsBody extends StatelessWidget {
                 ),
                 padding: const EdgeInsets.all(4),
                 child: File(sticker.imagePath).existsSync()
-                    ? Image.file(
-                        File(sticker.imagePath),
-                        fit: BoxFit.contain,
-                      )
+                    ? Image.file(File(sticker.imagePath), fit: BoxFit.contain)
                     : Icon(Icons.auto_awesome, color: scheme.primary),
               ),
               const SizedBox(width: MdSpacing.xs),
@@ -160,7 +203,9 @@ class _StickerDetailsBody extends StatelessWidget {
             haptic: M3EHapticFeedback.light,
             itemBuilder: (context, index) {
               final row = rows[index];
-              return Padding(
+              final onTap = row.$4;
+
+              Widget content = Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
@@ -171,11 +216,7 @@ class _StickerDetailsBody extends StatelessWidget {
                         color: scheme.primaryContainer.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
                       ),
-                      child: Icon(
-                        row.$3,
-                        size: 20,
-                        color: scheme.primary,
-                      ),
+                      child: Icon(row.$3, size: 20, color: scheme.primary),
                     ),
                     const SizedBox(width: MdSpacing.xs),
                     Expanded(
@@ -199,9 +240,30 @@ class _StickerDetailsBody extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (onTap != null) ...[
+                      const SizedBox(width: MdSpacing.xxs),
+                      Icon(
+                        Icons.open_in_new_rounded,
+                        size: 16,
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      ),
+                    ],
                   ],
                 ),
               );
+
+              if (onTap != null) {
+                return InkWell(
+                  onTap: () {
+                    M3EHapticFeedback.light.apply();
+                    onTap();
+                  },
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusXs),
+                  child: content,
+                );
+              }
+
+              return content;
             },
           ),
           const SizedBox(height: MdSpacing.md),
@@ -224,7 +286,9 @@ class _StickerDetailsBody extends StatelessWidget {
                     backgroundColor: WidgetStatePropertyAll(
                       scheme.errorContainer.withValues(alpha: 0.7),
                     ),
-                    foregroundColor: WidgetStatePropertyAll(scheme.onErrorContainer),
+                    foregroundColor: WidgetStatePropertyAll(
+                      scheme.onErrorContainer,
+                    ),
                   ),
                   onPressed: () {
                     M3EHapticFeedback.medium.apply();
@@ -309,4 +373,3 @@ class _StickerDetailsBody extends StatelessWidget {
     }
   }
 }
-
