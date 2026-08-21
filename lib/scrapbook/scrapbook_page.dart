@@ -83,7 +83,9 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     final empty = widget.repository.stickers.isEmpty;
     final compact = MediaQuery.sizeOf(context).width < 600;
     final margin = compact ? MdSpacing.compactMargin : MdSpacing.mediumMargin;
@@ -105,31 +107,81 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
             ),
           ),
           if (empty)
-            IgnorePointer(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(margin),
+            Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: margin * 1.5,
+                  vertical: margin,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      M3EShape.flower(
-                        width: 96,
-                        height: 96,
-                        color: scheme.primaryContainer,
+                      // Layered Expressive Shape Illustration
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          M3EShape.flower(
+                            width: 110,
+                            height: 110,
+                            color: scheme.primaryContainer.withValues(alpha: 0.5),
+                          ),
+                          M3EShape.c12SidedCookie(
+                            width: 80,
+                            height: 80,
+                            color: scheme.primaryContainer,
+                          ),
+                          Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 38,
+                            color: scheme.onPrimaryContainer,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: MdSpacing.md),
                       Text(
                         'Peel a memory onto the board',
-                        style: Theme.of(context).textTheme.headlineLarge,
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: scheme.onSurface,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: MdSpacing.xs),
                       Text(
-                        'Capture a photo and drop it as a vinyl sticker.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        'Capture photos and drop them as vinyl stickers on your infinite scrapbook canvas.',
+                        style: textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
+                          height: 1.4,
                         ),
                         textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: MdSpacing.md),
+                      Wrap(
+                        spacing: MdSpacing.xs,
+                        runSpacing: MdSpacing.xs,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          M3EFilledButton.icon(
+                            size: M3EButtonSize.sm,
+                            onPressed: () {
+                              M3EHapticFeedback.medium.apply();
+                              _openCapture(gallery: false);
+                            },
+                            icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                            label: const Text('Take Photo'),
+                          ),
+                          M3EFilledButton.tonalIcon(
+                            size: M3EButtonSize.sm,
+                            onPressed: () {
+                              M3EHapticFeedback.medium.apply();
+                              _openCapture(gallery: true);
+                            },
+                            icon: const Icon(Icons.photo_library_rounded, size: 18),
+                            label: const Text('Pick Photo'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -144,33 +196,58 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
               ),
               child: M3EHorizontalFloatingToolbar(
                 expanded: true,
-                tooltip: 'Capture dock',
+                tooltip: 'Scrapbook actions',
+                decoration: M3EFloatingToolbarDecoration(
+                  colors: M3EFloatingToolbarColors(
+                    toolbarContainerColor: scheme.surfaceContainerHighest,
+                    toolbarContentColor: scheme.onSurface,
+                    fabContainerColor: scheme.primary,
+                    fabContentColor: scheme.onPrimary,
+                  ),
+                  shape: const StadiumBorder(),
+                  expandedShadowElevation: 6,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: MdSpacing.xs,
+                    vertical: MdSpacing.xxs,
+                  ),
+                ),
                 content: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      tooltip: 'Camera',
+                      tooltip: 'Gallery',
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.surfaceContainerHigh,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
+                      onPressed: () {
+                        M3EHapticFeedback.light.apply();
+                        _openCapture(gallery: true);
+                      },
+                      icon: const Icon(Icons.photo_library_outlined, size: 22),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    M3EFilledButton.icon(
+                      size: M3EButtonSize.sm,
                       onPressed: () {
                         M3EHapticFeedback.medium.apply();
                         _openCapture(gallery: false);
                       },
-                      icon: const Icon(Icons.photo_camera_outlined),
+                      icon: const Icon(Icons.camera_alt_rounded, size: 20),
+                      label: const Text('Capture'),
                     ),
+                    const SizedBox(width: MdSpacing.xs),
                     IconButton(
-                      tooltip: 'Gallery',
+                      tooltip: 'Adjustments',
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.surfaceContainerHigh,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
                       onPressed: () {
-                        M3EHapticFeedback.medium.apply();
-                        _openCapture(gallery: true);
-                      },
-                      icon: const Icon(Icons.photo_library_outlined),
-                    ),
-                    IconButton(
-                      tooltip: 'Settings',
-                      onPressed: () {
-                        M3EHapticFeedback.medium.apply();
+                        M3EHapticFeedback.light.apply();
                         _openSettings();
                       },
-                      icon: const Icon(Icons.settings_outlined),
+                      icon: const Icon(Icons.tune_rounded, size: 22),
                     ),
                   ],
                 ),

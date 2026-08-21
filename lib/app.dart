@@ -23,12 +23,20 @@ class MemtickersApp extends StatelessWidget {
           theme: light,
           darkTheme: dark,
           themeMode: ThemeMode.system,
-          home: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              systemNavigationBarColor: light.colorScheme.surface,
-            ),
-            child: ScrapbookPage(repository: repository),
+          home: Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final currentScheme = isDark ? dark.colorScheme : light.colorScheme;
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Colors.transparent,
+                  statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                  systemNavigationBarColor: currentScheme.surface,
+                  systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                ),
+                child: ScrapbookPage(repository: repository),
+              );
+            },
           ),
         );
       },

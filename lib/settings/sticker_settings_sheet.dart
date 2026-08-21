@@ -110,8 +110,9 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -124,33 +125,125 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Header
           Row(
             children: [
-              Icon(Icons.tune_rounded, color: scheme.primary),
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                ),
+                child: Icon(
+                  Icons.tune_rounded,
+                  color: scheme.primary,
+                  size: 22,
+                ),
+              ),
               const SizedBox(width: MdSpacing.xs),
               Expanded(
-                child: Text(
-                  'Sticker Adjustments',
-                  style: textTheme.headlineSmall,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sticker Adjustments',
+                      style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      'Enhance vinyl color processing',
+                      style: textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
               ),
             ],
           ),
           const SizedBox(height: MdSpacing.xs),
           Text(
-            'Customize color adjustments for saving newly generated stickers. These enhancements take effect after subject cutout and vinyl backing are complete and do not alter previously created stickers.',
+            'Fine-tune the appearance of newly generated stickers after subject cutout and vinyl backing.',
             style: textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
+              height: 1.35,
             ),
           ),
-          const SizedBox(height: MdSpacing.md),
+          const SizedBox(height: MdSpacing.sm),
+
+          // Quick Preset Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ActionChip(
+                  avatar: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Default (100%)'),
+                  onPressed: () {
+                    M3EHapticFeedback.light.apply();
+                    setState(() {
+                      _saturation = 1.0;
+                      _brightness = 1.0;
+                    });
+                  },
+                ),
+                const SizedBox(width: MdSpacing.xs),
+                ActionChip(
+                  avatar: const Icon(Icons.auto_awesome, size: 16),
+                  label: const Text('Vibrant (+30%)'),
+                  onPressed: () {
+                    M3EHapticFeedback.light.apply();
+                    setState(() {
+                      _saturation = 1.3;
+                      _brightness = 1.05;
+                    });
+                  },
+                ),
+                const SizedBox(width: MdSpacing.xs),
+                ActionChip(
+                  avatar: const Icon(Icons.wb_twilight_rounded, size: 16),
+                  label: const Text('Moody Soft'),
+                  onPressed: () {
+                    M3EHapticFeedback.light.apply();
+                    setState(() {
+                      _saturation = 0.85;
+                      _brightness = 0.95;
+                    });
+                  },
+                ),
+                const SizedBox(width: MdSpacing.xs),
+                ActionChip(
+                  avatar: const Icon(Icons.filter_b_and_w_rounded, size: 16),
+                  label: const Text('Monochrome'),
+                  onPressed: () {
+                    M3EHapticFeedback.light.apply();
+                    setState(() {
+                      _saturation = 0.0;
+                      _brightness = 1.0;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: MdSpacing.sm),
 
           // Saturation Card
           Container(
             padding: const EdgeInsets.all(MdSpacing.sm),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(MdSpacing.sm),
+              borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,32 +253,42 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.palette_outlined,
-                          size: 20,
-                          color: scheme.onSurfaceVariant,
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: scheme.secondaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                          ),
+                          child: Icon(
+                            Icons.palette_rounded,
+                            size: 18,
+                            color: scheme.secondary,
+                          ),
                         ),
                         const SizedBox(width: MdSpacing.xs),
                         Text(
                           'Saturation',
-                          style: textTheme.titleMedium,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: MdSpacing.xs,
-                        vertical: MdSpacing.xxs,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: scheme.secondaryContainer,
-                        borderRadius: BorderRadius.circular(MdSpacing.xxs),
+                        borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
                       ),
                       child: Text(
                         _formatAdjustment(_saturation),
-                        style: textTheme.labelMedium?.copyWith(
+                        style: textTheme.labelSmall?.copyWith(
                           color: scheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -214,6 +317,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                       'Natural (100%)',
                       style: textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
@@ -235,7 +339,10 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
             padding: const EdgeInsets.all(MdSpacing.sm),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(MdSpacing.sm),
+              borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,32 +352,42 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   children: [
                     Row(
                       children: [
-                        Icon(
-                          Icons.wb_sunny_outlined,
-                          size: 20,
-                          color: scheme.onSurfaceVariant,
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: scheme.secondaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                          ),
+                          child: Icon(
+                            Icons.wb_sunny_rounded,
+                            size: 18,
+                            color: scheme.secondary,
+                          ),
                         ),
                         const SizedBox(width: MdSpacing.xs),
                         Text(
                           'Brightness',
-                          style: textTheme.titleMedium,
+                          style: textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: MdSpacing.xs,
-                        vertical: MdSpacing.xxs,
+                        vertical: 3,
                       ),
                       decoration: BoxDecoration(
                         color: scheme.secondaryContainer,
-                        borderRadius: BorderRadius.circular(MdSpacing.xxs),
+                        borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
                       ),
                       child: Text(
                         _formatAdjustment(_brightness),
-                        style: textTheme.labelMedium?.copyWith(
+                        style: textTheme.labelSmall?.copyWith(
                           color: scheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -299,6 +416,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                       'Natural (100%)',
                       style: textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
@@ -320,17 +438,18 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
             children: [
               Expanded(
                 child: M3ETextButton(
-                  size: M3EButtonSize.md,
+                  size: M3EButtonSize.sm,
                   onPressed: _reset,
                   child: const Text('Reset to default'),
                 ),
               ),
               const SizedBox(width: MdSpacing.xs),
               Expanded(
-                child: M3EFilledButton(
-                  size: M3EButtonSize.lg,
+                child: M3EFilledButton.icon(
+                  size: M3EButtonSize.sm,
                   onPressed: _save,
-                  child: const Text('Save settings'),
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Save settings'),
                 ),
               ),
             ],

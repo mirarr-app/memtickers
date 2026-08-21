@@ -222,6 +222,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_m3shapes_extended:
+    dependency: "direct main"
+    description:
+      name: flutter_m3shapes_extended
+      sha256: "37e5839a7ed4feb9c8a6deb4bb29949e1fc3dd9534863eaa92d160cc15b945c9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.1"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:

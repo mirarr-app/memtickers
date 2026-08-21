@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
@@ -21,11 +23,11 @@ Future<void> showStickerDetails({
         return Align(
           alignment: Alignment.centerRight,
           child: SizedBox(
-            width: 400,
+            width: 420,
             child: Material(
               color: Theme.of(context).colorScheme.surfaceContainerHigh,
               borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(MdSpacing.extraLargeIncreased),
+                left: Radius.circular(MdSpacing.radiusXlIncreased),
               ),
               child: SafeArea(
                 child: _StickerDetailsBody(
@@ -46,7 +48,7 @@ Future<void> showStickerDetails({
     backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(
-        top: Radius.circular(MdSpacing.extraLargeIncreased),
+        top: Radius.circular(MdSpacing.radiusXlIncreased),
       ),
     ),
     builder: (context) {
@@ -66,18 +68,21 @@ class _StickerDetailsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     final date = DateFormat.yMMMEd().format(sticker.createdAt);
     final time = DateFormat.jm().format(sticker.createdAt);
     final place = sticker.placeLabel ??
         (sticker.latitude != null && sticker.longitude != null
             ? '${sticker.latitude!.toStringAsFixed(4)}, ${sticker.longitude!.toStringAsFixed(4)}'
-            : 'Place unknown');
+            : 'Location not recorded');
 
     final rows = [
-      ('Place', place, Icons.place_outlined),
-      ('Date', date, Icons.calendar_today_outlined),
-      ('Time', time, Icons.schedule_outlined),
+      ('Place', place, Icons.place_rounded),
+      ('Date', date, Icons.calendar_today_rounded),
+      ('Time', time, Icons.schedule_rounded),
     ];
 
     return Padding(
@@ -91,43 +96,142 @@ class _StickerDetailsBody extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Memory', style: Theme.of(context).textTheme.headlineSmall),
+          // Header with Sticker Thumbnail & Title
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.4),
+                  ),
+                ),
+                padding: const EdgeInsets.all(4),
+                child: File(sticker.imagePath).existsSync()
+                    ? Image.file(
+                        File(sticker.imagePath),
+                        fit: BoxFit.contain,
+                      )
+                    : Icon(Icons.auto_awesome, color: scheme.primary),
+              ),
+              const SizedBox(width: MdSpacing.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Memory Details',
+                      style: textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      date,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Close',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
           const SizedBox(height: MdSpacing.sm),
+
+          // Expressive Card List for Metadata
           M3ECardList(
             itemCount: rows.length,
             color: scheme.surfaceContainerLowest,
+            padding: const EdgeInsets.symmetric(
+              horizontal: MdSpacing.sm,
+              vertical: MdSpacing.xs,
+            ),
+            outerRadius: MdSpacing.radiusLg,
+            innerRadius: MdSpacing.radiusXs,
+            gap: 2.0,
             haptic: M3EHapticFeedback.light,
             itemBuilder: (context, index) {
               final row = rows[index];
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(row.$3, color: scheme.onSurfaceVariant),
-                title: Text(row.$1, style: Theme.of(context).textTheme.titleMedium),
-                subtitle: Text(
-                  row.$2,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                      ),
+                      child: Icon(
+                        row.$3,
+                        size: 20,
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.$1,
+                            style: textTheme.labelSmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            row.$2,
+                            style: textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             },
           ),
           const SizedBox(height: MdSpacing.md),
+
+          // Action Buttons
           Row(
             children: [
               Expanded(
                 child: M3ETextButton(
-                  size: M3EButtonSize.md,
+                  size: M3EButtonSize.sm,
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Close'),
                 ),
               ),
               const SizedBox(width: MdSpacing.xs),
               Expanded(
-                child: M3EFilledButton.tonal(
-                  size: M3EButtonSize.md,
-                  onPressed: () => _confirmDelete(context),
-                  child: const Text('Delete'),
+                child: M3EFilledButton.tonalIcon(
+                  size: M3EButtonSize.sm,
+                  decoration: M3EButtonDecoration(
+                    backgroundColor: WidgetStatePropertyAll(
+                      scheme.errorContainer.withValues(alpha: 0.7),
+                    ),
+                    foregroundColor: WidgetStatePropertyAll(scheme.onErrorContainer),
+                  ),
+                  onPressed: () {
+                    M3EHapticFeedback.medium.apply();
+                    _confirmDelete(context);
+                  },
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete'),
                 ),
               ),
             ],
@@ -139,32 +243,61 @@ class _StickerDetailsBody extends StatelessWidget {
 
   Future<void> _confirmDelete(BuildContext context) async {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           backgroundColor: scheme.surfaceContainerHigh,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(MdSpacing.extraLarge),
+            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
           ),
-          title: Text(
-            'Peel this sticker off the board?',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          content: Text(
-            'This memory stays only on this device. Deleting removes the sticker file.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
+          icon: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: scheme.errorContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.delete_forever_rounded,
+              color: scheme.onErrorContainer,
+              size: 26,
             ),
           ),
+          title: Text(
+            'Peel this sticker off?',
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          content: Text(
+            'This memory sticker exists only on this device. Deleting will permanently remove it from your scrapbook.',
+            style: textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
           actions: [
             M3ETextButton(
+              size: M3EButtonSize.sm,
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancel'),
             ),
-            M3EFilledButton.tonal(
+            const SizedBox(width: MdSpacing.xs),
+            M3EFilledButton.icon(
+              size: M3EButtonSize.sm,
+              decoration: M3EButtonDecoration(
+                backgroundColor: WidgetStatePropertyAll(scheme.error),
+                foregroundColor: WidgetStatePropertyAll(scheme.onError),
+              ),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete'),
+              icon: const Icon(Icons.delete_rounded, size: 18),
+              label: const Text('Delete'),
             ),
           ],
         );
@@ -176,3 +309,4 @@ class _StickerDetailsBody extends StatelessWidget {
     }
   }
 }
+

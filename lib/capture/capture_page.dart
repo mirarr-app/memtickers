@@ -307,18 +307,38 @@ class _CapturePageState extends State<CapturePage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     final preview = _previewPng;
 
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: const Text('Capture'),
+        title: Text(preview != null ? 'Memory Preview' : 'Capture Memory'),
         leading: IconButton(
           tooltip: 'Back',
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
+        actions: [
+          if (preview == null)
+            Padding(
+              padding: const EdgeInsets.only(right: MdSpacing.xs),
+              child: ActionChip(
+                avatar: Icon(
+                  _hasGps ? Icons.location_on_rounded : Icons.location_off_rounded,
+                  size: 16,
+                  color: _hasGps ? scheme.primary : scheme.onSurfaceVariant,
+                ),
+                label: Text(_hasGps ? 'GPS on' : 'GPS off'),
+                onPressed: () {
+                  M3EHapticFeedback.light.apply();
+                  _ensureLocationOptional();
+                },
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         child: _busy
@@ -330,15 +350,25 @@ class _CapturePageState extends State<CapturePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       const M3ELoadingIndicator(semanticsLabel: 'Cutting out subject'),
-                      const SizedBox(height: MdSpacing.md),
+                      const SizedBox(height: MdSpacing.lg),
                       Text(
                         _status ?? 'Cutting the subject out…',
-                        style: Theme.of(context).textTheme.titleMedium,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: MdSpacing.xl),
-                      M3EFilledButton.tonal(
-                        size: M3EButtonSize.md,
+                      const SizedBox(height: MdSpacing.xs),
+                      Text(
+                        'Isolating subject and creating vinyl border…',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: MdSpacing.lg),
+                      M3ETextButton(
+                        size: M3EButtonSize.sm,
                         onPressed: _cancelCutout,
                         child: const Text('Cancel'),
                       ),
@@ -350,37 +380,165 @@ class _CapturePageState extends State<CapturePage> {
                 children: [
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: MdSpacing.sm),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(MdSpacing.extraLarge),
-                        child: ColoredBox(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: MdSpacing.sm,
+                        vertical: MdSpacing.xs,
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
                           color: scheme.surfaceContainerLow,
-                          child: preview != null
-                              ? Center(
-                                  child: Image.memory(
-                                    preview,
-                                    fit: BoxFit.contain,
-                                    filterQuality: FilterQuality.high,
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusXlIncreased,
+                          ),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: preview != null
+                            ? Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(MdSpacing.md),
+                                        child: Image.memory(
+                                          preview,
+                                          fit: BoxFit.contain,
+                                          filterQuality: FilterQuality.high,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                )
-                              : _cameraReady && _camera != null
-                              ? CameraPreview(_camera!)
-                              : Center(
-                                  child: Text(
-                                    'Camera unavailable. Import from gallery instead.',
-                                    style: Theme.of(context).textTheme.bodyMedium
-                                        ?.copyWith(color: scheme.onSurfaceVariant),
-                                    textAlign: TextAlign.center,
+                                  if (_pendingMeta?.placeLabel != null)
+                                    Positioned(
+                                      bottom: MdSpacing.sm,
+                                      left: MdSpacing.sm,
+                                      right: MdSpacing.sm,
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: MdSpacing.sm,
+                                            vertical: MdSpacing.xxs,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: scheme.surfaceContainerHighest
+                                                .withValues(alpha: 0.9),
+                                            borderRadius: BorderRadius.circular(
+                                              MdSpacing.radiusFull,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.place_rounded,
+                                                size: 16,
+                                                color: scheme.primary,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  _pendingMeta!.placeLabel!,
+                                                  style: textTheme.labelSmall?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              )
+                            : _cameraReady && _camera != null
+                            ? Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  CameraPreview(_camera!),
+                                  // Subtle framing corners
+                                  IgnorePointer(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(
+                                          MdSpacing.radiusXlIncreased,
+                                        ),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(alpha: 0.15),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(MdSpacing.md),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.no_photography_outlined,
+                                        size: 48,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(height: MdSpacing.xs),
+                                      Text(
+                                        'Camera unavailable',
+                                        style: textTheme.titleMedium,
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Import an existing memory from your gallery instead.',
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: scheme.onSurfaceVariant,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                        ),
+                              ),
                       ),
                     ),
                   ),
+                  if (!_modelReady && _status != null && _modelFailed)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: MdSpacing.sm),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: MdSpacing.xs),
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: scheme.errorContainer,
+                          borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.error_outline_rounded,
+                              size: 18,
+                              color: scheme.onErrorContainer,
+                            ),
+                            const SizedBox(width: MdSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                _status!,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: scheme.onErrorContainer,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
                       MdSpacing.sm,
-                      MdSpacing.sm,
+                      MdSpacing.xs,
                       MdSpacing.sm,
                       MdSpacing.md,
                     ),
@@ -388,73 +546,94 @@ class _CapturePageState extends State<CapturePage> {
                         ? Row(
                             children: [
                               Expanded(
-                                child: M3EFilledButton.tonal(
-                                  size: M3EButtonSize.md,
+                                child: M3EFilledButton.tonalIcon(
+                                  size: M3EButtonSize.sm,
                                   onPressed: _retake,
-                                  child: const Text('Retake'),
+                                  icon: const Icon(Icons.replay_rounded, size: 18),
+                                  label: const Text('Retake'),
                                 ),
                               ),
                               const SizedBox(width: MdSpacing.xs),
                               Expanded(
-                                child: M3EFilledButton(
-                                  size: M3EButtonSize.lg,
+                                child: M3EFilledButton.icon(
+                                  size: M3EButtonSize.sm,
                                   onPressed: _keep,
-                                  child: const Text('Keep sticker'),
+                                  icon: const Icon(Icons.check_rounded, size: 18),
+                                  label: const Text('Keep sticker'),
                                 ),
                               ),
                             ],
                           )
-                        : Column(
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              if (!_modelReady && _status != null && _modelFailed) ...[
-                                DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: scheme.errorContainer,
-                                    borderRadius: BorderRadius.circular(
-                                      MdSpacing.sm,
-                                    ),
-                                  ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(MdSpacing.sm),
-                                    child: Text(
-                                      _status!,
-                                      style: Theme.of(context).textTheme.bodyMedium
-                                          ?.copyWith(color: scheme.onErrorContainer),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
+                              // Gallery Button
+                              IconButton.filledTonal(
+                                tooltip: 'Import from Gallery',
+                                style: IconButton.styleFrom(
+                                  backgroundColor: scheme.surfaceContainerHigh,
+                                  padding: const EdgeInsets.all(MdSpacing.sm),
                                 ),
-                                const SizedBox(height: MdSpacing.sm),
-                              ],
-                              ActionChip(
-                                avatar: Icon(
-                                  _hasGps ? Icons.location_on : Icons.location_off,
-                                  size: 18,
-                                ),
-                                label: Text(_hasGps ? 'Location on' : 'Location off'),
-                                onPressed: _ensureLocationOptional,
-                              ),
-                              const SizedBox(height: MdSpacing.sm),
-                              M3EFilledButton(
-                                size: M3EButtonSize.xl,
-                                onPressed: (_cameraReady && !_takingPicture) ? _shutter : null,
-                                semanticLabel: 'Shutter',
-                                child: _takingPicture
-                                    ? SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2.5,
-                                          color: scheme.onPrimary,
-                                        ),
-                                      )
-                                    : const Icon(Icons.camera_alt),
-                              ),
-                              const SizedBox(height: MdSpacing.xs),
-                              M3EFilledButton.tonal(
-                                size: M3EButtonSize.md,
                                 onPressed: !_takingPicture ? _pickGallery : null,
-                                child: const Text('Gallery'),
+                                icon: const Icon(
+                                  Icons.photo_library_rounded,
+                                  size: 24,
+                                ),
+                              ),
+
+                              // Expressive Hero Shutter Button
+                              GestureDetector(
+                                onTap: (_cameraReady && !_takingPicture) ? _shutter : null,
+                                child: Container(
+                                  width: 76,
+                                  height: 76,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: scheme.primary,
+                                      width: 3.5,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(5),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: (_cameraReady && !_takingPicture)
+                                          ? scheme.primary
+                                          : scheme.primary.withValues(alpha: 0.3),
+                                    ),
+                                    child: Center(
+                                      child: _takingPicture
+                                          ? SizedBox(
+                                              width: 26,
+                                              height: 26,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2.5,
+                                                color: scheme.onPrimary,
+                                              ),
+                                            )
+                                          : Icon(
+                                              Icons.camera_alt_rounded,
+                                              size: 30,
+                                              color: scheme.onPrimary,
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+
+                              // Spacing balance or Quick info
+                              IconButton(
+                                tooltip: 'Gallery import',
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  padding: const EdgeInsets.all(MdSpacing.sm),
+                                ),
+                                onPressed: !_takingPicture ? _pickGallery : null,
+                                icon: const Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  size: 24,
+                                ),
                               ),
                             ],
                           ),
