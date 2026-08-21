@@ -71,14 +71,25 @@ class MetadataService {
       final marks = await placemarkFromCoordinates(lat, lng);
       if (marks.isEmpty) return null;
       final mark = marks.first;
-      final parts = [
-        mark.locality,
-        mark.subAdministrativeArea,
-        mark.administrativeArea,
-        mark.country,
-      ].whereType<String>().where((s) => s.trim().isNotEmpty);
+
+      final street = (mark.street?.trim().isNotEmpty == true)
+          ? mark.street
+          : mark.thoroughfare;
+
+      final city = (mark.locality?.trim().isNotEmpty == true)
+          ? mark.locality
+          : mark.subLocality;
+
+      final country = mark.country;
+
+      final parts = [street, city, country]
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toSet();
+
       if (parts.isEmpty) return null;
-      return parts.take(3).join(', ');
+      return parts.join(', ');
     } catch (_) {
       return null;
     }
