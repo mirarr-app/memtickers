@@ -5,14 +5,19 @@ import 'spacing.dart';
 /// Warm paper / vibrant coral seed used when dynamic color is unavailable.
 const Color kMemtickersSeed = Color(0xFFE05338);
 
+/// Default handwriting font family for Memtickers.
+const String kMemtickersFontFamily = 'Excalifont';
+
 ThemeData memtickersTheme(ColorScheme scheme) {
   final textTheme = _buildExpressiveTextTheme(scheme);
 
   return ThemeData(
     useMaterial3: true,
+    fontFamily: kMemtickersFontFamily,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
     textTheme: textTheme,
+    primaryTextTheme: textTheme,
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
@@ -118,6 +123,7 @@ ThemeData memtickersTheme(ColorScheme scheme) {
 TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
   return TextTheme(
     displayLarge: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 57,
       height: 64 / 57,
       fontWeight: FontWeight.w400,
@@ -125,6 +131,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     displayMedium: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 45,
       height: 52 / 45,
       fontWeight: FontWeight.w400,
@@ -132,6 +139,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     displaySmall: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 36,
       height: 44 / 36,
       fontWeight: FontWeight.w400,
@@ -139,6 +147,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     headlineLarge: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 32,
       height: 40 / 32,
       fontWeight: FontWeight.w700,
@@ -146,6 +155,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     headlineMedium: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 28,
       height: 36 / 28,
       fontWeight: FontWeight.w600,
@@ -153,6 +163,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     headlineSmall: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 24,
       height: 32 / 24,
       fontWeight: FontWeight.w600,
@@ -160,6 +171,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     titleLarge: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 22,
       height: 28 / 22,
       fontWeight: FontWeight.w600,
@@ -167,6 +179,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     titleMedium: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 16,
       height: 24 / 16,
       fontWeight: FontWeight.w600,
@@ -174,6 +187,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     titleSmall: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 14,
       height: 20 / 14,
       fontWeight: FontWeight.w600,
@@ -181,6 +195,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     bodyLarge: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 16,
       height: 24 / 16,
       fontWeight: FontWeight.w400,
@@ -188,6 +203,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     bodyMedium: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 14,
       height: 20 / 14,
       fontWeight: FontWeight.w400,
@@ -195,6 +211,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     bodySmall: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 12,
       height: 16 / 12,
       fontWeight: FontWeight.w400,
@@ -202,6 +219,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurfaceVariant,
     ),
     labelLarge: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 14,
       height: 20 / 14,
       fontWeight: FontWeight.w600,
@@ -209,6 +227,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     labelMedium: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 12,
       height: 16 / 12,
       fontWeight: FontWeight.w600,
@@ -216,6 +235,7 @@ TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {
       color: scheme.onSurface,
     ),
     labelSmall: TextStyle(
+      fontFamily: kMemtickersFontFamily,
       fontSize: 11,
       height: 16 / 11,
       fontWeight: FontWeight.w600,

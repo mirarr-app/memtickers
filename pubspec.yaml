@@ -38,3 +38,8 @@ flutter:
     - assets/models/isnet-general-use-q8.onnx
     - assets/models/mobileclip-s0-vision.onnx
     - assets/models/mobileclip_tags.json
+
+  fonts:
+    - family: Excalifont
+      fonts:
+        - asset: assets/Excalifont-Regular.ttf
