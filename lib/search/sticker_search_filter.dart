@@ -6,16 +6,19 @@ import '../data/sticker.dart';
 class StickerSearchFilter {
   const StickerSearchFilter({
     this.tags = const [],
+    this.modelTags = const [],
     this.dateRange,
     this.locationQuery,
   });
 
   final List<String> tags;
+  final List<String> modelTags;
   final DateTimeRange? dateRange;
   final String? locationQuery;
 
   bool get isEmpty =>
       tags.isEmpty &&
+      modelTags.isEmpty &&
       dateRange == null &&
       (locationQuery == null || locationQuery!.trim().isEmpty);
 
@@ -24,6 +27,7 @@ class StickerSearchFilter {
   int get activeFilterCount {
     var count = 0;
     if (tags.isNotEmpty) count++;
+    if (modelTags.isNotEmpty) count++;
     if (dateRange != null) count++;
     if (locationQuery != null && locationQuery!.trim().isNotEmpty) count++;
     return count;
@@ -32,11 +36,21 @@ class StickerSearchFilter {
   bool matches(Sticker sticker) {
     if (isEmpty) return true;
 
-    // Filter by tags: match if sticker has any of the selected tags
+    // Filter by user tags: match if sticker has any of the selected user tags
     if (tags.isNotEmpty) {
       final stickerTagsLower = sticker.tags.map((t) => t.toLowerCase()).toSet();
       final hasMatch = tags.any(
         (t) => stickerTagsLower.contains(t.toLowerCase()),
+      );
+      if (!hasMatch) return false;
+    }
+
+    // Filter by model tags: match if sticker has any of the selected AI model tags
+    if (modelTags.isNotEmpty) {
+      final stickerModelTagsLower =
+          sticker.modelTags.map((t) => t.toLowerCase()).toSet();
+      final hasMatch = modelTags.any(
+        (t) => stickerModelTagsLower.contains(t.toLowerCase()),
       );
       if (!hasMatch) return false;
     }
@@ -76,6 +90,7 @@ class StickerSearchFilter {
 
   StickerSearchFilter copyWith({
     List<String>? tags,
+    List<String>? modelTags,
     DateTimeRange? dateRange,
     String? locationQuery,
     bool clearDateRange = false,
@@ -83,6 +98,7 @@ class StickerSearchFilter {
   }) {
     return StickerSearchFilter(
       tags: tags ?? this.tags,
+      modelTags: modelTags ?? this.modelTags,
       dateRange: clearDateRange ? null : (dateRange ?? this.dateRange),
       locationQuery: clearLocation
           ? null
@@ -94,6 +110,9 @@ class StickerSearchFilter {
     final parts = <String>[];
     if (tags.isNotEmpty) {
       parts.add(tags.map((t) => '#$t').join(', '));
+    }
+    if (modelTags.isNotEmpty) {
+      parts.add(modelTags.map((t) => 'AI: $t').join(', '));
     }
     if (dateRange != null) {
       final formatter = DateFormat('MMM d, yyyy');

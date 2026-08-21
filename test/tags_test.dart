@@ -100,6 +100,36 @@ void main() {
       final updated = sticker.copyWith(tags: const ['NewTag']);
       expect(updated.tags, equals(['NewTag']));
     });
+
+    test('retains modelTags and handles copyWith modelTags', () {
+      final sticker = Sticker(
+        id: 's1',
+        imagePath: '/path/to/img.png',
+        createdAt: DateTime(2025, 1, 1),
+        tags: const ['userTag'],
+        modelTags: const ['coffee', 'mug'],
+        x: 100,
+        y: 100,
+        rotation: 0.0,
+        scale: 1.0,
+        zIndex: 0,
+      );
+      expect(sticker.tags, equals(['userTag']));
+      expect(sticker.modelTags, equals(['coffee', 'mug']));
+
+      final updated = sticker.copyWith(modelTags: const ['latte', 'drink']);
+      expect(updated.tags, equals(['userTag']));
+      expect(updated.modelTags, equals(['latte', 'drink']));
+
+      final map = sticker.toMap();
+      final restored = Sticker.fromMap(
+        map,
+        tags: const ['userTag'],
+        modelTags: const ['coffee', 'mug'],
+      );
+      expect(restored.tags, equals(['userTag']));
+      expect(restored.modelTags, equals(['coffee', 'mug']));
+    });
   });
 
   group('TagsSheet UI Widget Tests', () {

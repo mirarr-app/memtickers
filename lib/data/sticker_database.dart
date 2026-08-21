@@ -13,7 +13,7 @@ class StickerDatabase {
     final path = p.join(docs.path, 'memtickers.db');
     _db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE boards (
@@ -42,27 +42,57 @@ CREATE TABLE stickers (
 )
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS settings (\n  key TEXT PRIMARY KEY,\n  value TEXT NOT NULL\n)
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS tags (\n  id TEXT PRIMARY KEY,\n  name TEXT UNIQUE NOT NULL,\n  createdAt INTEGER NOT NULL\n)
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS sticker_tags (\n  stickerId TEXT NOT NULL,\n  tagId TEXT NOT NULL,\n  PRIMARY KEY (stickerId, tagId)\n)
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
+)
+''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_model_tags (
+  stickerId TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tag)
+)
 ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute('''
-CREATE TABLE IF NOT EXISTS tags (\n  id TEXT PRIMARY KEY,\n  name TEXT UNIQUE NOT NULL,\n  createdAt INTEGER NOT NULL\n)
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
 ''');
           await db.execute('''
-CREATE TABLE IF NOT EXISTS sticker_tags (\n  stickerId TEXT NOT NULL,\n  tagId TEXT NOT NULL,\n  PRIMARY KEY (stickerId, tagId)\n)
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
+)
 ''');
         }
         if (oldVersion < 3) {
           await db.execute('''
-CREATE TABLE IF NOT EXISTS boards (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  createdAt INTEGER NOT NULL\n)
+CREATE TABLE IF NOT EXISTS boards (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  createdAt INTEGER NOT NULL
+)
 ''');
           await db.execute('''
 INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch})
@@ -73,22 +103,53 @@ INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Boar
             );
           } catch (_) {}
         }
+        if (oldVersion < 4) {
+          await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_model_tags (
+  stickerId TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tag)
+)
+''');
+        }
       },
       onOpen: (db) async {
         await db.execute('''
-CREATE TABLE IF NOT EXISTS boards (\n  id TEXT PRIMARY KEY,\n  name TEXT NOT NULL,\n  createdAt INTEGER NOT NULL\n)
+CREATE TABLE IF NOT EXISTS boards (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  createdAt INTEGER NOT NULL
+)
 ''');
         await db.execute('''
 INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch})
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS settings (\n  key TEXT PRIMARY KEY,\n  value TEXT NOT NULL\n)
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+)
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS tags (\n  id TEXT PRIMARY KEY,\n  name TEXT UNIQUE NOT NULL,\n  createdAt INTEGER NOT NULL\n)
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
 ''');
         await db.execute('''
-CREATE TABLE IF NOT EXISTS sticker_tags (\n  stickerId TEXT NOT NULL,\n  tagId TEXT NOT NULL,\n  PRIMARY KEY (stickerId, tagId)\n)
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
+)
+''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_model_tags (
+  stickerId TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tag)
+)
 ''');
         try {
           await db.execute(

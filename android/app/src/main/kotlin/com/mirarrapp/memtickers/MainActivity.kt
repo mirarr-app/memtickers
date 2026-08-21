@@ -9,13 +9,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.mirarrapp.memtickers/cutout"
+    private val CUTOUT_CHANNEL = "com.mirarrapp.memtickers/cutout"
+    private val AUTOTAG_CHANNEL = "com.mirarrapp.memtickers/autotag"
     private val mainScope = CoroutineScope(Dispatchers.Main)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        // Cutout / Segmentation Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CUTOUT_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isModelReady" -> {
                     result.success(IsnetSegmenter.isLoaded)
@@ -64,10 +66,67 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // AutoTagging Channel (MobileCLIP-S0)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AUTOTAG_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isModelReady" -> {
+                    result.success(AutoTagger.isLoaded)
+                }
+
+                "ensureModel" -> {
+                    mainScope.launch {
+                        try {
+                            AutoTagger.ensureLoaded(applicationContext)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("LOAD_ERROR", e.message, e.stackTraceToString())
+                        }
+                    }
+                }
+
+                "predictTags" -> {
+                    val imagePath = call.argument<String>("imagePath")
+                    val topK = call.argument<Int>("topK") ?: 5
+                    val minConfidence = (call.argument<Double>("minConfidence") ?: 0.18).toFloat()
+
+                    if (imagePath == null) {
+                        result.error("INVALID_ARGUMENT", "imagePath is required", null)
+                        return@setMethodCallHandler
+                    }
+
+                    mainScope.launch {
+                        try {
+                            val tags = withContext(Dispatchers.Default) {
+                                AutoTagger.predictTags(
+                                    applicationContext,
+                                    imagePath,
+                                    topK,
+                                    minConfidence
+                                )
+                            }
+                            result.success(tags)
+                        } catch (e: Exception) {
+                            result.error("TAGGER_ERROR", e.message, e.stackTraceToString())
+                        }
+                    }
+                }
+
+                "dispose" -> {
+                    AutoTagger.close()
+                    result.success(null)
+                }
+
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
         IsnetSegmenter.close()
+        AutoTagger.close()
         super.onDestroy()
     }
 }

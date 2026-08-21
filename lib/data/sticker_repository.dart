@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../capture/auto_tag_service.dart';
 import 'sticker.dart';
 import 'sticker_board.dart';
 import 'sticker_database.dart';
@@ -86,6 +87,18 @@ class StickerRepository extends ChangeNotifier {
       stickerTagsMap.putIfAbsent(stickerId, () => []).add(tagName);
     }
 
+    // Load sticker-model-tags relations
+    final modelTagRows = await db.query(
+      'sticker_model_tags',
+      orderBy: 'tag COLLATE NOCASE ASC',
+    );
+    final stickerModelTagsMap = <String, List<String>>{};
+    for (final row in modelTagRows) {
+      final stickerId = row['stickerId'] as String;
+      final tag = row['tag'] as String;
+      stickerModelTagsMap.putIfAbsent(stickerId, () => []).add(tag);
+    }
+
     // Load stickers
     final rows = await db.query('stickers', orderBy: 'zIndex ASC');
     _stickers
@@ -93,7 +106,11 @@ class StickerRepository extends ChangeNotifier {
       ..addAll(
         rows.map((row) {
           final id = row['id'] as String;
-          return Sticker.fromMap(row, tags: stickerTagsMap[id] ?? const []);
+          return Sticker.fromMap(
+            row,
+            tags: stickerTagsMap[id] ?? const [],
+            modelTags: stickerModelTagsMap[id] ?? const [],
+          );
         }),
       );
 
@@ -420,6 +437,22 @@ class StickerRepository extends ChangeNotifier {
     _tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     final updatedSticker = preparedSticker.copyWith(tags: resolvedTags);
+
+    // Save model tags in db
+    await db.delete(
+      'sticker_model_tags',
+      where: 'stickerId = ?',
+      whereArgs: [preparedSticker.id],
+    );
+    for (final tag in preparedSticker.modelTags) {
+      final trimmed = tag.trim();
+      if (trimmed.isEmpty) continue;
+      await db.insert('sticker_model_tags', {
+        'stickerId': preparedSticker.id,
+        'tag': trimmed,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
     final index = _stickers.indexWhere((s) => s.id == preparedSticker.id);
     if (index >= 0) {
       _stickers[index] = updatedSticker;
@@ -439,6 +472,69 @@ class StickerRepository extends ChangeNotifier {
     final sticker = _stickers[index];
     final updated = sticker.copyWith(tags: newTagNames);
     await save(updated);
+  }
+
+  Future<void> setStickerModelTags(
+    String stickerId,
+    List<String> newModelTags,
+  ) async {
+    final index = _stickers.indexWhere((s) => s.id == stickerId);
+    if (index == -1) return;
+
+    final sticker = _stickers[index];
+    final updated = sticker.copyWith(modelTags: newModelTags);
+    await save(updated);
+  }
+
+  Future<void> promoteModelTagToUserTag(String stickerId, String tag) async {
+    final index = _stickers.indexWhere((s) => s.id == stickerId);
+    if (index == -1) return;
+
+    final sticker = _stickers[index];
+    final userTags = Set<String>.from(sticker.tags)..add(tag);
+    final updated = sticker.copyWith(tags: userTags.toList());
+    await save(updated);
+  }
+
+  Future<void> removeModelTag(String stickerId, String tag) async {
+    final index = _stickers.indexWhere((s) => s.id == stickerId);
+    if (index == -1) return;
+
+    final sticker = _stickers[index];
+    final modelTags = List<String>.from(sticker.modelTags)..remove(tag);
+    final updated = sticker.copyWith(modelTags: modelTags);
+    await save(updated);
+  }
+
+  List<String> get allModelTags {
+    final set = <String>{};
+    for (final s in _stickers) {
+      set.addAll(s.modelTags);
+    }
+    final list = set.toList();
+    list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return List.unmodifiable(list);
+  }
+
+  /// Asynchronously predicts AI model tags in the background for a sticker after it is placed/saved.
+  Future<void> generateModelTags(String stickerId) async {
+    final sticker = _stickers.where((s) => s.id == stickerId).firstOrNull;
+    if (sticker == null) return;
+    final file = File(sticker.imagePath);
+    if (!await file.exists()) return;
+
+    try {
+      final tags = await AutoTagService.predictTags(
+        file,
+        topK: 5,
+        minConfidence: 0.12,
+      );
+      if (tags.isNotEmpty) {
+        await setStickerModelTags(stickerId, tags);
+      }
+    } catch (e) {
+      debugPrint('Error generating model tags in background: $e');
+    }
   }
 
   Future<void> updateTransform(Sticker sticker) async {
@@ -473,6 +569,7 @@ class StickerRepository extends ChangeNotifier {
     final existing = _stickers.where((s) => s.id == id).firstOrNull;
     await db.delete('stickers', where: 'id = ?', whereArgs: [id]);
     await db.delete('sticker_tags', where: 'stickerId = ?', whereArgs: [id]);
+    await db.delete('sticker_model_tags', where: 'stickerId = ?', whereArgs: [id]);
     _stickers.removeWhere((s) => s.id == id);
     if (existing != null) {
       final file = File(existing.imagePath);

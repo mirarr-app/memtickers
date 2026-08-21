@@ -14,6 +14,7 @@ import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../tags/tag_selection_sheet.dart';
 import '../theme/spacing.dart';
+import 'auto_tag_service.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
 import 'segmentation_service.dart';
@@ -87,6 +88,7 @@ class _CapturePageState extends State<CapturePage> {
   }
 
   Future<void> _prepareModel() async {
+    unawaited(AutoTagService.ensureModel());
     try {
       await _segmenter.ensureModel(onStatus: _onCutoutStatus);
     } catch (error) {
@@ -397,6 +399,7 @@ class _CapturePageState extends State<CapturePage> {
       longitude: meta.longitude,
       placeLabel: meta.placeLabel,
       tags: _selectedTags.toList(),
+      modelTags: const [],
       x: widget.dropX,
       y: widget.dropY,
       rotation: jitter,
@@ -404,6 +407,8 @@ class _CapturePageState extends State<CapturePage> {
       zIndex: widget.repository.nextZIndex(),
     );
     await widget.repository.save(sticker);
+    // Asynchronously generate AI model tags in the background now that the sticker is placed & saved
+    unawaited(widget.repository.generateModelTags(id));
     if (!mounted) return;
     Navigator.of(context).pop(CaptureResult(sticker: sticker, pngBytes: png));
   }
@@ -732,6 +737,7 @@ class _CapturePageState extends State<CapturePage> {
                     ),
                   ),
                   if (preview != null)
+                    // User Custom Tags
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                         MdSpacing.sm,

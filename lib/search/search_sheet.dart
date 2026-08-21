@@ -81,27 +81,34 @@ class _SearchSheetBody extends StatefulWidget {
 
 class _SearchSheetBodyState extends State<_SearchSheetBody> {
   late final Set<String> _selectedTags;
+  late final Set<String> _selectedModelTags;
   DateTimeRange? _dateRange;
   late final TextEditingController _locationController;
+  late final TextEditingController _aiTagController;
+  String _aiTagQuery = '';
 
   @override
   void initState() {
     super.initState();
     _selectedTags = Set.from(widget.initialFilter?.tags ?? const []);
+    _selectedModelTags = Set.from(widget.initialFilter?.modelTags ?? const []);
     _dateRange = widget.initialFilter?.dateRange;
     _locationController = TextEditingController(
       text: widget.initialFilter?.locationQuery ?? '',
     );
+    _aiTagController = TextEditingController();
   }
 
   @override
   void dispose() {
     _locationController.dispose();
+    _aiTagController.dispose();
     super.dispose();
   }
 
   StickerSearchFilter get _currentFilter => StickerSearchFilter(
     tags: _selectedTags.toList(),
+    modelTags: _selectedModelTags.toList(),
     dateRange: _dateRange,
     locationQuery: _locationController.text.trim().isEmpty
         ? null
@@ -161,6 +168,9 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
     M3EHapticFeedback.medium.apply();
     setState(() {
       _selectedTags.clear();
+      _selectedModelTags.clear();
+      _aiTagController.clear();
+      _aiTagQuery = '';
       _dateRange = null;
       _locationController.clear();
     });
@@ -184,74 +194,245 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
 
     return Column(
       children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            MdSpacing.md,
-            MdSpacing.xs,
-            MdSpacing.sm,
-            MdSpacing.xs,
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
-                ),
-                child: Icon(
-                  Icons.search_rounded,
-                  size: 22,
-                  color: scheme.onPrimaryContainer,
-                ),
-              ),
-              const SizedBox(width: MdSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Search Memories',
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      'Filter board by tags, date & location',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (hasActiveFilters)
-                M3ETextButton(
-                  size: M3EButtonSize.sm,
-                  onPressed: _clearAll,
-                  child: const Text('Reset'),
-                ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded),
-                tooltip: 'Close',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-
-        // Scrollable content
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: MdSpacing.md,
-              vertical: MdSpacing.sm,
+        // Header Bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              MdSpacing.md,
+              MdSpacing.sm,
+              MdSpacing.xs,
+              MdSpacing.xs,
             ),
-            children: [
-              // TAGS FILTER SECTION
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Search Memories',
+                        style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Filter board by tags, date & location',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_selectedTags.isNotEmpty ||
+                    _selectedModelTags.isNotEmpty ||
+                    _dateRange != null ||
+                    _locationController.text.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: _clearAll,
+                    icon: const Icon(Icons.restart_alt_rounded, size: 16),
+                    label: const Text('Reset'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: scheme.error,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          // Scrollable content
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: MdSpacing.md,
+                vertical: MdSpacing.sm,
+              ),
+              children: [
+                // AI AUTO-TAGS FILTER SECTION (Search / Type Input)
+                _SectionHeader(
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'AI Auto-Tags',
+                  trailing: _selectedModelTags.isNotEmpty
+                      ? Text(
+                          '${_selectedModelTags.length} selected',
+                          style: textTheme.labelSmall?.copyWith(
+                            color: scheme.tertiary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(height: MdSpacing.xxs),
+
+                // Selected AI tag chips
+                if (_selectedModelTags.isNotEmpty) ...[
+                  Wrap(
+                    spacing: MdSpacing.xs,
+                    runSpacing: MdSpacing.xxs,
+                    children: _selectedModelTags.map((tag) {
+                      return InputChip(
+                        avatar: Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 14,
+                          color: scheme.onTertiaryContainer,
+                        ),
+                        label: Text(tag),
+                        backgroundColor: scheme.tertiaryContainer,
+                        labelStyle: textTheme.labelSmall?.copyWith(
+                          color: scheme.onTertiaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        deleteIcon: Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: scheme.onTertiaryContainer,
+                        ),
+                        onDeleted: () {
+                          M3EHapticFeedback.light.apply();
+                          setState(() => _selectedModelTags.remove(tag));
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: MdSpacing.xs),
+                ],
+
+                // AI Tag search/type input field
+                TextField(
+                  controller: _aiTagController,
+                  decoration: InputDecoration(
+                    hintText: 'Type to find AI tag (e.g. cat, coffee)…',
+                    hintStyle: textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: scheme.tertiary,
+                    ),
+                    suffixIcon: _aiTagController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                _aiTagController.clear();
+                                _aiTagQuery = '';
+                              });
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: scheme.surfaceContainerHighest.withValues(
+                      alpha: 0.45,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: MdSpacing.sm,
+                      vertical: MdSpacing.xs,
+                    ),
+                  ),
+                  onChanged: (val) {
+                    setState(() => _aiTagQuery = val.trim().toLowerCase());
+                  },
+                  onSubmitted: (val) {
+                    final query = val.trim().toLowerCase();
+                    if (query.isNotEmpty) {
+                      M3EHapticFeedback.light.apply();
+                      setState(() {
+                        _selectedModelTags.add(query);
+                        _aiTagController.clear();
+                        _aiTagQuery = '';
+                      });
+                    }
+                  },
+                ),
+
+                // Suggestions list when typing
+                if (_aiTagQuery.isNotEmpty) ...[
+                  const SizedBox(height: MdSpacing.xxs),
+                  Builder(
+                    builder: (context) {
+                      final matchingTags = widget.repository.allModelTags
+                          .where(
+                            (t) =>
+                                t.toLowerCase().contains(_aiTagQuery) &&
+                                !_selectedModelTags.contains(t),
+                          )
+                          .take(6)
+                          .toList();
+
+                      return Wrap(
+                        spacing: MdSpacing.xs,
+                        runSpacing: MdSpacing.xxs,
+                        children: [
+                          for (final tag in matchingTags)
+                            ActionChip(
+                              avatar: Icon(
+                                Icons.add_rounded,
+                                size: 14,
+                                color: scheme.tertiary,
+                              ),
+                              label: Text(tag),
+                              backgroundColor: scheme.tertiaryContainer
+                                  .withValues(alpha: 0.35),
+                              labelStyle: textTheme.labelSmall?.copyWith(
+                                color: scheme.onTertiaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              side: BorderSide(
+                                color: scheme.tertiary.withValues(alpha: 0.3),
+                              ),
+                              onPressed: () {
+                                M3EHapticFeedback.light.apply();
+                                setState(() {
+                                  _selectedModelTags.add(tag);
+                                  _aiTagController.clear();
+                                  _aiTagQuery = '';
+                                });
+                              },
+                            ),
+                          if (!matchingTags.contains(_aiTagQuery))
+                            ActionChip(
+                              avatar: Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 14,
+                                color: scheme.tertiary,
+                              ),
+                              label: Text('Filter by "$_aiTagQuery"'),
+                              backgroundColor: scheme.tertiaryContainer
+                                  .withValues(alpha: 0.6),
+                              labelStyle: textTheme.labelSmall?.copyWith(
+                                color: scheme.onTertiaryContainer,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              side: BorderSide(color: scheme.tertiary),
+                              onPressed: () {
+                                M3EHapticFeedback.light.apply();
+                                setState(() {
+                                  _selectedModelTags.add(_aiTagQuery);
+                                  _aiTagController.clear();
+                                  _aiTagQuery = '';
+                                });
+                              },
+                            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(height: MdSpacing.md),
+
+              // USER TAGS FILTER SECTION
               _SectionHeader(
                 icon: Icons.label_outline_rounded,
                 title: 'Tags',
@@ -274,7 +455,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                     borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
                   ),
                   child: Text(
-                    'No tags created yet. Create tags when capturing or viewing stickers.',
+                    'No custom tags created yet.',
                     style: textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),

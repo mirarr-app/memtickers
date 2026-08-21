@@ -16,6 +16,7 @@ void main() {
       createdAt: DateTime(2026, 6, 15, 12, 0),
       placeLabel: 'Eiffel Tower, Paris',
       tags: const ['vacation', 'europe'],
+      modelTags: const ['landmark', 'architecture'],
       x: 100,
       y: 100,
       rotation: 0,
@@ -29,6 +30,7 @@ void main() {
       createdAt: DateTime(2026, 7, 20, 15, 30),
       placeLabel: 'Shibuya Crossing, Tokyo',
       tags: const ['vacation', 'asia', 'food'],
+      modelTags: const ['city', 'ramen'],
       x: 500,
       y: 500,
       rotation: 0.1,
@@ -42,6 +44,7 @@ void main() {
       createdAt: DateTime(2026, 8, 10, 9, 0),
       placeLabel: 'Central Park, New York',
       tags: const ['friends', 'nature'],
+      modelTags: const ['tree', 'park'],
       x: 900,
       y: 900,
       rotation: -0.2,
@@ -67,6 +70,18 @@ void main() {
       expect(multiTagFilter.matches(sticker1), isTrue);
       expect(multiTagFilter.matches(sticker2), isFalse);
       expect(multiTagFilter.matches(sticker3), isTrue);
+    });
+
+    test('filters by AI model tags', () {
+      const filter = StickerSearchFilter(modelTags: ['ramen']);
+      expect(filter.matches(sticker1), isFalse);
+      expect(filter.matches(sticker2), isTrue);
+      expect(filter.matches(sticker3), isFalse);
+
+      const multiModelFilter = StickerSearchFilter(modelTags: ['landmark', 'park']);
+      expect(multiModelFilter.matches(sticker1), isTrue);
+      expect(multiModelFilter.matches(sticker2), isFalse);
+      expect(multiModelFilter.matches(sticker3), isTrue);
     });
 
     test('filters by date range', () {

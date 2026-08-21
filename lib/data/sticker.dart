@@ -13,6 +13,7 @@ class Sticker {
     this.longitude,
     this.placeLabel,
     this.tags = const [],
+    this.modelTags = const [],
   });
 
   final String id;
@@ -28,6 +29,7 @@ class Sticker {
   final double scale;
   final int zIndex;
   final List<String> tags;
+  final List<String> modelTags;
 
   Sticker copyWith({
     String? boardId,
@@ -42,6 +44,7 @@ class Sticker {
     double? scale,
     int? zIndex,
     List<String>? tags,
+    List<String>? modelTags,
     bool clearLocation = false,
   }) {
     return Sticker(
@@ -58,6 +61,7 @@ class Sticker {
       scale: scale ?? this.scale,
       zIndex: zIndex ?? this.zIndex,
       tags: tags ?? this.tags,
+      modelTags: modelTags ?? this.modelTags,
     );
   }
 
@@ -81,6 +85,7 @@ class Sticker {
   factory Sticker.fromMap(
     Map<String, Object?> map, {
     List<String> tags = const [],
+    List<String> modelTags = const [],
   }) {
     return Sticker(
       id: map['id']! as String,
@@ -96,6 +101,7 @@ class Sticker {
       scale: (map['scale']! as num).toDouble(),
       zIndex: map['zIndex']! as int,
       tags: tags,
+      modelTags: modelTags,
     );
   }
 }

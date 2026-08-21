@@ -67,7 +67,7 @@ Future<void> showStickerDetails({
   );
 }
 
-class _StickerDetailsBody extends StatelessWidget {
+class _StickerDetailsBody extends StatefulWidget {
   const _StickerDetailsBody({
     required this.initialSticker,
     required this.repository,
@@ -75,6 +75,35 @@ class _StickerDetailsBody extends StatelessWidget {
 
   final Sticker initialSticker;
   final StickerRepository repository;
+
+  @override
+  State<_StickerDetailsBody> createState() => _StickerDetailsBodyState();
+}
+
+class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
+  bool _isGeneratingTags = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSticker.modelTags.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _triggerTagGeneration();
+      });
+    }
+  }
+
+  Future<void> _triggerTagGeneration() async {
+    if (_isGeneratingTags) return;
+    setState(() => _isGeneratingTags = true);
+    try {
+      await widget.repository.generateModelTags(widget.initialSticker.id);
+    } finally {
+      if (mounted) {
+        setState(() => _isGeneratingTags = false);
+      }
+    }
+  }
 
   Future<void> _openInMaps(BuildContext context, Sticker sticker) async {
     final hasCoords = sticker.latitude != null && sticker.longitude != null;
@@ -116,17 +145,17 @@ class _StickerDetailsBody extends StatelessWidget {
   Future<void> _manageStickerTags(BuildContext context, Sticker sticker) async {
     final updated = await showTagSelectionSheet(
       context: context,
-      repository: repository,
+      repository: widget.repository,
       initialSelectedTags: Set<String>.from(sticker.tags),
     );
     if (updated != null) {
       M3EHapticFeedback.medium.apply();
-      await repository.setStickerTags(sticker.id, updated.toList());
+      await widget.repository.setStickerTags(sticker.id, updated.toList());
     }
   }
 
   Future<void> _moveStickerBoard(BuildContext context, Sticker sticker) async {
-    final boards = repository.boards;
+    final boards = widget.repository.boards;
     if (boards.length <= 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -149,8 +178,8 @@ class _StickerDetailsBody extends StatelessWidget {
             borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
           ),
           title: Text(
-            'Move to Board',
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            'Move Sticker to Board',
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           children: [
             for (final b in boards)
@@ -197,7 +226,7 @@ class _StickerDetailsBody extends StatelessWidget {
         selectedBoardId != sticker.boardId &&
         context.mounted) {
       M3EHapticFeedback.medium.apply();
-      await repository.moveStickerToBoard(sticker.id, selectedBoardId);
+      await widget.repository.moveStickerToBoard(sticker.id, selectedBoardId);
       final destName = boards.firstWhere((b) => b.id == selectedBoardId).name;
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -218,19 +247,19 @@ class _StickerDetailsBody extends StatelessWidget {
     final textTheme = theme.textTheme;
 
     return ListenableBuilder(
-      listenable: repository,
+      listenable: widget.repository,
       builder: (context, _) {
         final sticker =
-            repository.allStickers
-                .where((s) => s.id == initialSticker.id)
+            widget.repository.allStickers
+                .where((s) => s.id == widget.initialSticker.id)
                 .firstOrNull ??
-            initialSticker;
+            widget.initialSticker;
 
         final currentBoard =
-            repository.boards
+            widget.repository.boards
                 .where((b) => b.id == sticker.boardId)
                 .firstOrNull ??
-            repository.activeBoard;
+            widget.repository.activeBoard;
 
         final date = DateFormat.yMMMEd().format(sticker.createdAt);
         final time = DateFormat.jm().format(sticker.createdAt);
@@ -409,7 +438,170 @@ class _StickerDetailsBody extends StatelessWidget {
 
               const SizedBox(height: MdSpacing.xs),
 
-              // Tags Section Card
+              // AI Model Auto-Tags Card
+              Container(
+                padding: const EdgeInsets.all(MdSpacing.sm),
+                decoration: BoxDecoration(
+                  color: scheme.tertiaryContainer.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+                  border: Border.all(
+                    color: scheme.tertiary.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.auto_awesome_rounded,
+                              size: 18,
+                              color: scheme.tertiary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'AI Auto-Tags',
+                              style: textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.tertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.tertiary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(
+                              MdSpacing.radiusFull,
+                            ),
+                          ),
+                          child: Text(
+                            'MobileCLIP',
+                            style: textTheme.labelSmall?.copyWith(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.tertiary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    if (sticker.modelTags.isNotEmpty)
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final tag in sticker.modelTags)
+                            Builder(
+                              builder: (context) {
+                                final isUserTag = sticker.tags.contains(tag);
+                                return Tooltip(
+                                  message: isUserTag
+                                      ? 'Already added to your tags'
+                                      : 'Tap to add to your tags',
+                                  child: InputChip(
+                                    avatar: Icon(
+                                      isUserTag
+                                          ? Icons.check_rounded
+                                          : Icons.add_rounded,
+                                      size: 14,
+                                      color: scheme.onTertiaryContainer,
+                                    ),
+                                    label: Text(tag),
+                                    labelStyle: textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onTertiaryContainer,
+                                    ),
+                                    backgroundColor: scheme.tertiaryContainer
+                                        .withValues(alpha: isUserTag ? 0.85 : 0.5),
+                                    deleteIcon: Icon(
+                                      Icons.close_rounded,
+                                      size: 14,
+                                      color: scheme.onTertiaryContainer,
+                                    ),
+                                    onDeleted: () {
+                                      M3EHapticFeedback.light.apply();
+                                      widget.repository.removeModelTag(
+                                        sticker.id,
+                                        tag,
+                                      );
+                                    },
+                                    onPressed: () {
+                                      M3EHapticFeedback.light.apply();
+                                      if (!isUserTag) {
+                                        widget.repository.promoteModelTagToUserTag(
+                                          sticker.id,
+                                          tag,
+                                        );
+                                      }
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      )
+                    else if (_isGeneratingTags)
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: scheme.tertiary,
+                            ),
+                          ),
+                          const SizedBox(width: MdSpacing.xs),
+                          Text(
+                            'Detecting AI tags…',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: scheme.onTertiaryContainer,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'No AI tags detected yet.',
+                            style: textTheme.bodySmall?.copyWith(
+                              color: scheme.onTertiaryContainer.withValues(
+                                alpha: 0.8,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _triggerTagGeneration,
+                            icon: const Icon(
+                              Icons.refresh_rounded,
+                              size: 16,
+                            ),
+                            label: const Text('Re-detect'),
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: scheme.tertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: MdSpacing.xs),
+
+              // User Tags Section Card
               Container(
                 padding: const EdgeInsets.all(MdSpacing.sm),
                 decoration: BoxDecoration(
@@ -434,7 +626,7 @@ class _StickerDetailsBody extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Tags',
+                              'My Tags',
                               style: textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -478,7 +670,7 @@ class _StickerDetailsBody extends StatelessWidget {
                     const SizedBox(height: 6),
                     if (sticker.tags.isEmpty)
                       Text(
-                        'No tags assigned to this sticker.',
+                        'No user tags assigned.',
                         style: textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                           fontStyle: FontStyle.italic,
@@ -621,7 +813,7 @@ class _StickerDetailsBody extends StatelessWidget {
       },
     );
     if (confirmed == true && context.mounted) {
-      await repository.delete(sticker.id);
+      await widget.repository.delete(sticker.id);
       if (context.mounted) Navigator.of(context).pop();
     }
   }

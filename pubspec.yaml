@@ -36,3 +36,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/models/isnet-general-use-q8.onnx
+    - assets/models/mobileclip-s0-vision.onnx
+    - assets/models/mobileclip_tags.json
