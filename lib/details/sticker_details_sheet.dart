@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
+import '../tags/tag_selection_sheet.dart';
 import '../theme/spacing.dart';
 
 Future<void> showStickerDetails({
@@ -32,7 +33,7 @@ Future<void> showStickerDetails({
               ),
               child: SafeArea(
                 child: _StickerDetailsBody(
-                  sticker: sticker,
+                  initialSticker: sticker,
                   repository: repository,
                 ),
               ),
@@ -45,6 +46,7 @@ Future<void> showStickerDetails({
 
   return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     showDragHandle: true,
     backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
     shape: const RoundedRectangleBorder(
@@ -53,18 +55,28 @@ Future<void> showStickerDetails({
       ),
     ),
     builder: (context) {
-      return _StickerDetailsBody(sticker: sticker, repository: repository);
+      return SafeArea(
+        child: SingleChildScrollView(
+          child: _StickerDetailsBody(
+            initialSticker: sticker,
+            repository: repository,
+          ),
+        ),
+      );
     },
   );
 }
 
 class _StickerDetailsBody extends StatelessWidget {
-  const _StickerDetailsBody({required this.sticker, required this.repository});
+  const _StickerDetailsBody({
+    required this.initialSticker,
+    required this.repository,
+  });
 
-  final Sticker sticker;
+  final Sticker initialSticker;
   final StickerRepository repository;
 
-  Future<void> _openInMaps(BuildContext context) async {
+  Future<void> _openInMaps(BuildContext context, Sticker sticker) async {
     final hasCoords = sticker.latitude != null && sticker.longitude != null;
     if (!hasCoords &&
         (sticker.placeLabel == null || sticker.placeLabel!.isEmpty)) {
@@ -101,211 +113,354 @@ class _StickerDetailsBody extends StatelessWidget {
     }
   }
 
+  Future<void> _manageStickerTags(BuildContext context, Sticker sticker) async {
+    final updated = await showTagSelectionSheet(
+      context: context,
+      repository: repository,
+      initialSelectedTags: Set<String>.from(sticker.tags),
+    );
+    if (updated != null) {
+      M3EHapticFeedback.medium.apply();
+      await repository.setStickerTags(sticker.id, updated.toList());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
 
-    final date = DateFormat.yMMMEd().format(sticker.createdAt);
-    final time = DateFormat.jm().format(sticker.createdAt);
-    final hasLocation =
-        sticker.latitude != null ||
-        sticker.longitude != null ||
-        (sticker.placeLabel != null && sticker.placeLabel!.isNotEmpty);
+    return ListenableBuilder(
+      listenable: repository,
+      builder: (context, _) {
+        final sticker =
+            repository.stickers
+                .where((s) => s.id == initialSticker.id)
+                .firstOrNull ??
+            initialSticker;
 
-    final place =
-        sticker.placeLabel ??
-        (sticker.latitude != null && sticker.longitude != null
-            ? '${sticker.latitude!.toStringAsFixed(4)}, ${sticker.longitude!.toStringAsFixed(4)}'
-            : 'Location not recorded');
+        final date = DateFormat.yMMMEd().format(sticker.createdAt);
+        final time = DateFormat.jm().format(sticker.createdAt);
+        final hasLocation =
+            sticker.latitude != null ||
+            sticker.longitude != null ||
+            (sticker.placeLabel != null && sticker.placeLabel!.isNotEmpty);
 
-    final rows = [
-      (
-        'Place',
-        place,
-        Icons.place_rounded,
-        hasLocation ? () => _openInMaps(context) : null,
-      ),
-      ('Date', date, Icons.calendar_today_rounded, null),
-      ('Time', time, Icons.schedule_rounded, null),
-    ];
+        final place =
+            sticker.placeLabel ??
+            (sticker.latitude != null && sticker.longitude != null
+                ? '${sticker.latitude!.toStringAsFixed(4)}, ${sticker.longitude!.toStringAsFixed(4)}'
+                : 'Location not recorded');
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        MdSpacing.sm,
-        MdSpacing.xs,
-        MdSpacing.sm,
-        MdSpacing.md,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header with Sticker Thumbnail & Title
-          Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.4),
-                  ),
-                ),
-                padding: const EdgeInsets.all(4),
-                child: File(sticker.imagePath).existsSync()
-                    ? Image.file(File(sticker.imagePath), fit: BoxFit.contain)
-                    : Icon(Icons.auto_awesome, color: scheme.primary),
-              ),
-              const SizedBox(width: MdSpacing.xs),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Memory Details',
-                      style: textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    Text(
-                      date,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Close',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ],
+        final rows = [
+          (
+            'Place',
+            place,
+            Icons.place_rounded,
+            hasLocation ? () => _openInMaps(context, sticker) : null,
           ),
-          const SizedBox(height: MdSpacing.sm),
+          ('Date', date, Icons.calendar_today_rounded, null),
+          ('Time', time, Icons.schedule_rounded, null),
+        ];
 
-          // Expressive Card List for Metadata
-          M3ECardList(
-            itemCount: rows.length,
-            color: scheme.surfaceContainerLowest,
-            padding: const EdgeInsets.symmetric(
-              horizontal: MdSpacing.sm,
-              vertical: MdSpacing.xs,
-            ),
-            outerRadius: MdSpacing.radiusLg,
-            innerRadius: MdSpacing.radiusXs,
-            gap: 2.0,
-            haptic: M3EHapticFeedback.light,
-            itemBuilder: (context, index) {
-              final row = rows[index];
-              final onTap = row.$4;
-
-              Widget content = Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            MdSpacing.sm,
+            MdSpacing.xs,
+            MdSpacing.sm,
+            MdSpacing.md,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header with Sticker Thumbnail & Title
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.4),
                       ),
-                      child: Icon(row.$3, size: 20, color: scheme.primary),
                     ),
-                    const SizedBox(width: MdSpacing.xs),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            row.$1,
-                            style: textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
+                    padding: const EdgeInsets.all(4),
+                    child: File(sticker.imagePath).existsSync()
+                        ? Image.file(
+                            File(sticker.imagePath),
+                            fit: BoxFit.contain,
+                          )
+                        : Icon(Icons.auto_awesome, color: scheme.primary),
+                  ),
+                  const SizedBox(width: MdSpacing.xs),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Memory Details',
+                          style: textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          date,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: MdSpacing.sm),
+
+              // Expressive Card List for Metadata
+              M3ECardList(
+                itemCount: rows.length,
+                color: scheme.surfaceContainerLowest,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: MdSpacing.sm,
+                  vertical: MdSpacing.xs,
+                ),
+                outerRadius: MdSpacing.radiusLg,
+                innerRadius: MdSpacing.radiusXs,
+                gap: 2.0,
+                haptic: M3EHapticFeedback.light,
+                itemBuilder: (context, index) {
+                  final row = rows[index];
+                  final onTap = row.$4;
+
+                  Widget content = Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: scheme.primaryContainer.withValues(
+                              alpha: 0.4,
+                            ),
+                            borderRadius: BorderRadius.circular(
+                              MdSpacing.radiusSm,
                             ),
                           ),
-                          Text(
-                            row.$2,
-                            style: textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w500,
-                              color: scheme.onSurface,
+                          child: Icon(row.$3, size: 20, color: scheme.primary),
+                        ),
+                        const SizedBox(width: MdSpacing.xs),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                row.$1,
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                row.$2,
+                                style: textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                  color: scheme.onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (onTap != null) ...[
+                          const SizedBox(width: MdSpacing.xxs),
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            size: 16,
+                            color: scheme.onSurfaceVariant.withValues(
+                              alpha: 0.7,
                             ),
                           ),
                         ],
-                      ),
+                      ],
                     ),
-                    if (onTap != null) ...[
-                      const SizedBox(width: MdSpacing.xxs),
-                      Icon(
-                        Icons.open_in_new_rounded,
-                        size: 16,
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  );
+
+                  if (onTap != null) {
+                    return InkWell(
+                      onTap: () {
+                        M3EHapticFeedback.light.apply();
+                        onTap();
+                      },
+                      borderRadius: BorderRadius.circular(MdSpacing.radiusXs),
+                      child: content,
+                    );
+                  }
+
+                  return content;
+                },
+              ),
+
+              const SizedBox(height: MdSpacing.xs),
+
+              // Tags Section Card
+              Container(
+                padding: const EdgeInsets.all(MdSpacing.sm),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.sell_outlined,
+                              size: 18,
+                              color: scheme.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Tags',
+                              style: textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: () {
+                            M3EHapticFeedback.light.apply();
+                            _manageStickerTags(context, sticker);
+                          },
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusFull,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: MdSpacing.xs,
+                              vertical: 2,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.edit_rounded,
+                                  size: 14,
+                                  color: scheme.primary,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Edit',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: scheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    if (sticker.tags.isEmpty)
+                      Text(
+                        'No tags assigned to this sticker.',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      )
+                    else
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in sticker.tags)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: MdSpacing.xs,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: scheme.secondaryContainer.withValues(
+                                  alpha: 0.6,
+                                ),
+                                borderRadius: BorderRadius.circular(
+                                  MdSpacing.radiusFull,
+                                ),
+                              ),
+                              child: Text(
+                                '#$tag',
+                                style: textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSecondaryContainer,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
                   ],
                 ),
-              );
-
-              if (onTap != null) {
-                return InkWell(
-                  onTap: () {
-                    M3EHapticFeedback.light.apply();
-                    onTap();
-                  },
-                  borderRadius: BorderRadius.circular(MdSpacing.radiusXs),
-                  child: content,
-                );
-              }
-
-              return content;
-            },
-          ),
-          const SizedBox(height: MdSpacing.md),
-
-          // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: M3ETextButton(
-                  size: M3EButtonSize.sm,
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
-                ),
               ),
-              const SizedBox(width: MdSpacing.xs),
-              Expanded(
-                child: M3EFilledButton.tonalIcon(
-                  size: M3EButtonSize.sm,
-                  decoration: M3EButtonDecoration(
-                    backgroundColor: WidgetStatePropertyAll(
-                      scheme.errorContainer.withValues(alpha: 0.7),
-                    ),
-                    foregroundColor: WidgetStatePropertyAll(
-                      scheme.onErrorContainer,
+
+              const SizedBox(height: MdSpacing.md),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: M3ETextButton(
+                      size: M3EButtonSize.sm,
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Close'),
                     ),
                   ),
-                  onPressed: () {
-                    M3EHapticFeedback.medium.apply();
-                    _confirmDelete(context);
-                  },
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: const Text('Delete'),
-                ),
+                  const SizedBox(width: MdSpacing.xs),
+                  Expanded(
+                    child: M3EFilledButton.tonalIcon(
+                      size: M3EButtonSize.sm,
+                      decoration: M3EButtonDecoration(
+                        backgroundColor: WidgetStatePropertyAll(
+                          scheme.errorContainer.withValues(alpha: 0.7),
+                        ),
+                        foregroundColor: WidgetStatePropertyAll(
+                          scheme.onErrorContainer,
+                        ),
+                      ),
+                      onPressed: () {
+                        M3EHapticFeedback.medium.apply();
+                        _confirmDelete(context, sticker);
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                      label: const Text('Delete'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context) async {
+  Future<void> _confirmDelete(BuildContext context, Sticker sticker) async {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 

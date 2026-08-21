@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
+import '../tags/tag_selection_sheet.dart';
 import '../theme/spacing.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
@@ -58,6 +59,7 @@ class _CapturePageState extends State<CapturePage> {
   String? _status;
   MemoryMetadata? _pendingMeta;
   Uint8List? _previewPng;
+  final Set<String> _selectedTags = <String>{};
   bool _hasGps = false;
   int _processGeneration = 0;
 
@@ -96,7 +98,7 @@ class _CapturePageState extends State<CapturePage> {
       _modelReady = status.ready;
       _modelFailed = status.failed;
       if (status.ready) {
-        _status = _busy ? 'Cutting the subject out…' : null;
+        _status = _busy ? 'Cutting the subject out\u2026' : null;
       } else {
         _status = status.message;
       }
@@ -135,7 +137,9 @@ class _CapturePageState extends State<CapturePage> {
       final service = await Permission.locationWhenInUse.serviceStatus;
       final status = await Permission.locationWhenInUse.status;
       if (!mounted) return;
-      setState(() => _hasGps = service == ServiceStatus.enabled && status.isGranted);
+      setState(
+        () => _hasGps = service == ServiceStatus.enabled && status.isGranted,
+      );
     } catch (_) {}
   }
 
@@ -147,7 +151,12 @@ class _CapturePageState extends State<CapturePage> {
 
   Future<void> _shutter() async {
     final camera = _camera;
-    if (camera == null || !camera.value.isInitialized || _busy || _takingPicture) return;
+    if (camera == null ||
+        !camera.value.isInitialized ||
+        _busy ||
+        _takingPicture) {
+      return;
+    }
     M3EHapticFeedback.medium.apply();
     setState(() => _takingPicture = true);
     await _ensureLocationOptional();
@@ -187,17 +196,23 @@ class _CapturePageState extends State<CapturePage> {
     setState(() {
       _busy = true;
       _takingPicture = false;
-      _status = _modelReady ? 'Cutting the subject out…' : 'Loading cutout model…';
+      _status = _modelReady
+          ? 'Cutting the subject out\u2026'
+          : 'Loading cutout model\u2026';
       _previewPng = null;
+      _selectedTags.clear();
     });
 
     try {
-      final cutout = await _segmenter.cutOut(file, onStatus: (status) {
-        if (_processGeneration == gen) _onCutoutStatus(status);
-      });
+      final cutout = await _segmenter.cutOut(
+        file,
+        onStatus: (status) {
+          if (_processGeneration == gen) _onCutoutStatus(status);
+        },
+      );
       if (!mounted || _processGeneration != gen) return;
 
-      setState(() => _status = 'Adding the vinyl backing…');
+      setState(() => _status = 'Adding the vinyl backing\u2026');
       final dieCut = await _processor.dieCut(cutout);
       if (!mounted || _processGeneration != gen) return;
 
@@ -250,11 +265,28 @@ class _CapturePageState extends State<CapturePage> {
       _status = null;
       _previewPng = null;
       _pendingMeta = null;
+      _selectedTags.clear();
     });
   }
 
   String _friendlyError(Object error) {
     return 'Could not cut out this photo. Try another one.';
+  }
+
+  Future<void> _openTagSelection() async {
+    M3EHapticFeedback.medium.apply();
+    final updated = await showTagSelectionSheet(
+      context: context,
+      repository: widget.repository,
+      initialSelectedTags: _selectedTags,
+    );
+    if (updated != null && mounted) {
+      setState(() {
+        _selectedTags
+          ..clear()
+          ..addAll(updated);
+      });
+    }
   }
 
   Future<void> _keep() async {
@@ -273,6 +305,7 @@ class _CapturePageState extends State<CapturePage> {
       latitude: meta.latitude,
       longitude: meta.longitude,
       placeLabel: meta.placeLabel,
+      tags: _selectedTags.toList(),
       x: widget.dropX,
       y: widget.dropY,
       rotation: jitter,
@@ -291,11 +324,13 @@ class _CapturePageState extends State<CapturePage> {
     setState(() {
       _previewPng = null;
       _pendingMeta = null;
+      _selectedTags.clear();
     });
   }
 
   void _snack(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -327,7 +362,9 @@ class _CapturePageState extends State<CapturePage> {
               padding: const EdgeInsets.only(right: MdSpacing.xs),
               child: ActionChip(
                 avatar: Icon(
-                  _hasGps ? Icons.location_on_rounded : Icons.location_off_rounded,
+                  _hasGps
+                      ? Icons.location_on_rounded
+                      : Icons.location_off_rounded,
                   size: 16,
                   color: _hasGps ? scheme.primary : scheme.onSurfaceVariant,
                 ),
@@ -349,10 +386,12 @@ class _CapturePageState extends State<CapturePage> {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const M3ELoadingIndicator(semanticsLabel: 'Cutting out subject'),
+                      const M3ELoadingIndicator(
+                        semanticsLabel: 'Cutting out subject',
+                      ),
                       const SizedBox(height: MdSpacing.lg),
                       Text(
-                        _status ?? 'Cutting the subject out…',
+                        _status ?? 'Cutting the subject out\u2026',
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -360,7 +399,7 @@ class _CapturePageState extends State<CapturePage> {
                       ),
                       const SizedBox(height: MdSpacing.xs),
                       Text(
-                        'Isolating subject and creating vinyl border…',
+                        'Isolating subject and creating vinyl border\u2026',
                         style: textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -401,7 +440,9 @@ class _CapturePageState extends State<CapturePage> {
                                   Positioned.fill(
                                     child: Center(
                                       child: Padding(
-                                        padding: const EdgeInsets.all(MdSpacing.md),
+                                        padding: const EdgeInsets.all(
+                                          MdSpacing.md,
+                                        ),
                                         child: Image.memory(
                                           preview,
                                           fit: BoxFit.contain,
@@ -422,7 +463,8 @@ class _CapturePageState extends State<CapturePage> {
                                             vertical: MdSpacing.xxs,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: scheme.surfaceContainerHighest
+                                            color: scheme
+                                                .surfaceContainerHighest
                                                 .withValues(alpha: 0.9),
                                             borderRadius: BorderRadius.circular(
                                               MdSpacing.radiusFull,
@@ -440,10 +482,13 @@ class _CapturePageState extends State<CapturePage> {
                                               Flexible(
                                                 child: Text(
                                                   _pendingMeta!.placeLabel!,
-                                                  style: textTheme.labelSmall?.copyWith(
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
+                                                  style: textTheme.labelSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -466,7 +511,9 @@ class _CapturePageState extends State<CapturePage> {
                                           MdSpacing.radiusXlIncreased,
                                         ),
                                         border: Border.all(
-                                          color: Colors.white.withValues(alpha: 0.15),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.15,
+                                          ),
                                           width: 1.5,
                                         ),
                                       ),
@@ -505,15 +552,128 @@ class _CapturePageState extends State<CapturePage> {
                       ),
                     ),
                   ),
+                  if (preview != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        MdSpacing.sm,
+                        0,
+                        MdSpacing.sm,
+                        MdSpacing.xs,
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: MdSpacing.sm,
+                          vertical: MdSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerLowest,
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusLg,
+                          ),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            // Expressive Tag Button that triggers search modal
+                            M3EFilledButton.tonalIcon(
+                              size: M3EButtonSize.sm,
+                              onPressed: _openTagSelection,
+                              icon: const Icon(Icons.sell_outlined, size: 18),
+                              label: Text(
+                                _selectedTags.isEmpty
+                                    ? 'Tags'
+                                    : 'Tags (${_selectedTags.length})',
+                              ),
+                            ),
+                            const SizedBox(width: MdSpacing.xs),
+                            // Scrollable list of currently selected tag chips
+                            Expanded(
+                              child: _selectedTags.isEmpty
+                                  ? InkWell(
+                                      onTap: _openTagSelection,
+                                      borderRadius: BorderRadius.circular(
+                                        MdSpacing.radiusSm,
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: MdSpacing.xs,
+                                          vertical: 6,
+                                        ),
+                                        child: Text(
+                                          'No tags selected',
+                                          style: textTheme.bodySmall?.copyWith(
+                                            color: scheme.onSurfaceVariant
+                                                .withValues(alpha: 0.8),
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [
+                                          for (final tagName
+                                              in _selectedTags) ...[
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                right: 6,
+                                              ),
+                                              child: InputChip(
+                                                label: Text('#$tagName'),
+                                                labelStyle: textTheme.labelSmall
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: scheme
+                                                          .onSecondaryContainer,
+                                                    ),
+                                                backgroundColor: scheme
+                                                    .secondaryContainer
+                                                    .withValues(alpha: 0.7),
+                                                deleteIcon: Icon(
+                                                  Icons.close_rounded,
+                                                  size: 14,
+                                                  color: scheme
+                                                      .onSecondaryContainer,
+                                                ),
+                                                onDeleted: () {
+                                                  M3EHapticFeedback.light
+                                                      .apply();
+                                                  setState(() {
+                                                    _selectedTags.remove(
+                                                      tagName,
+                                                    );
+                                                  });
+                                                },
+                                                onPressed: _openTagSelection,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (!_modelReady && _status != null && _modelFailed)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: MdSpacing.sm),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: MdSpacing.sm,
+                      ),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: MdSpacing.xs),
                         padding: const EdgeInsets.all(MdSpacing.xs),
                         decoration: BoxDecoration(
                           color: scheme.errorContainer,
-                          borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusSm,
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -549,7 +709,10 @@ class _CapturePageState extends State<CapturePage> {
                                 child: M3EFilledButton.tonalIcon(
                                   size: M3EButtonSize.sm,
                                   onPressed: _retake,
-                                  icon: const Icon(Icons.replay_rounded, size: 18),
+                                  icon: const Icon(
+                                    Icons.replay_rounded,
+                                    size: 18,
+                                  ),
                                   label: const Text('Retake'),
                                 ),
                               ),
@@ -558,7 +721,10 @@ class _CapturePageState extends State<CapturePage> {
                                 child: M3EFilledButton.icon(
                                   size: M3EButtonSize.sm,
                                   onPressed: _keep,
-                                  icon: const Icon(Icons.check_rounded, size: 18),
+                                  icon: const Icon(
+                                    Icons.check_rounded,
+                                    size: 18,
+                                  ),
                                   label: const Text('Keep sticker'),
                                 ),
                               ),
@@ -574,7 +740,9 @@ class _CapturePageState extends State<CapturePage> {
                                   backgroundColor: scheme.surfaceContainerHigh,
                                   padding: const EdgeInsets.all(MdSpacing.sm),
                                 ),
-                                onPressed: !_takingPicture ? _pickGallery : null,
+                                onPressed: !_takingPicture
+                                    ? _pickGallery
+                                    : null,
                                 icon: const Icon(
                                   Icons.photo_library_rounded,
                                   size: 24,
@@ -583,7 +751,9 @@ class _CapturePageState extends State<CapturePage> {
 
                               // Expressive Hero Shutter Button
                               GestureDetector(
-                                onTap: (_cameraReady && !_takingPicture) ? _shutter : null,
+                                onTap: (_cameraReady && !_takingPicture)
+                                    ? _shutter
+                                    : null,
                                 child: Container(
                                   width: 76,
                                   height: 76,
@@ -600,7 +770,9 @@ class _CapturePageState extends State<CapturePage> {
                                       shape: BoxShape.circle,
                                       color: (_cameraReady && !_takingPicture)
                                           ? scheme.primary
-                                          : scheme.primary.withValues(alpha: 0.3),
+                                          : scheme.primary.withValues(
+                                              alpha: 0.3,
+                                            ),
                                     ),
                                     child: Center(
                                       child: _takingPicture
@@ -629,7 +801,9 @@ class _CapturePageState extends State<CapturePage> {
                                   backgroundColor: Colors.transparent,
                                   padding: const EdgeInsets.all(MdSpacing.sm),
                                 ),
-                                onPressed: !_takingPicture ? _pickGallery : null,
+                                onPressed: !_takingPicture
+                                    ? _pickGallery
+                                    : null,
                                 icon: const Icon(
                                   Icons.add_photo_alternate_outlined,
                                   size: 24,

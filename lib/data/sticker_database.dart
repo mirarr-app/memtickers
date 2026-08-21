@@ -13,7 +13,7 @@ class StickerDatabase {
     final path = p.join(docs.path, 'memtickers.db');
     _db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE stickers (
@@ -36,12 +36,58 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 )
 ''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
+''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
+)
+''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
+''');
+          await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
+)
+''');
+        }
       },
       onOpen: (db) async {
         await db.execute('''
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+)
+''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  createdAt INTEGER NOT NULL
+)
+''');
+        await db.execute('''
+CREATE TABLE IF NOT EXISTS sticker_tags (
+  stickerId TEXT NOT NULL,
+  tagId TEXT NOT NULL,
+  PRIMARY KEY (stickerId, tagId)
 )
 ''');
       },

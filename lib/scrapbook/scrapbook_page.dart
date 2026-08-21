@@ -6,6 +6,7 @@ import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../details/sticker_details_sheet.dart';
 import '../settings/sticker_settings_sheet.dart';
+import '../tags/tags_sheet.dart';
 import '../theme/spacing.dart';
 import 'scrapbook_canvas.dart';
 
@@ -74,11 +75,12 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
     );
   }
 
+  void _openTags() {
+    showTagsSheet(context: context, repository: widget.repository);
+  }
+
   void _openSettings() {
-    showStickerSettings(
-      context: context,
-      repository: widget.repository,
-    );
+    showStickerSettings(context: context, repository: widget.repository);
   }
 
   @override
@@ -125,7 +127,9 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                           M3EShape.flower(
                             width: 110,
                             height: 110,
-                            color: scheme.primaryContainer.withValues(alpha: 0.5),
+                            color: scheme.primaryContainer.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           M3EShape.c12SidedCookie(
                             width: 80,
@@ -169,7 +173,10 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                               M3EHapticFeedback.medium.apply();
                               _openCapture(gallery: false);
                             },
-                            icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.camera_alt_rounded,
+                              size: 18,
+                            ),
                             label: const Text('Take Photo'),
                           ),
                           M3EFilledButton.tonalIcon(
@@ -178,7 +185,10 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                               M3EHapticFeedback.medium.apply();
                               _openCapture(gallery: true);
                             },
-                            icon: const Icon(Icons.photo_library_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.photo_library_rounded,
+                              size: 18,
+                            ),
                             label: const Text('Pick Photo'),
                           ),
                         ],
@@ -235,6 +245,19 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                       },
                       icon: const Icon(Icons.camera_alt_rounded, size: 20),
                       label: const Text('Capture'),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    IconButton(
+                      tooltip: 'Tags',
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.surfaceContainerHigh,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
+                      onPressed: () {
+                        M3EHapticFeedback.light.apply();
+                        _openTags();
+                      },
+                      icon: const Icon(Icons.label_outline_rounded, size: 22),
                     ),
                     const SizedBox(width: MdSpacing.xs),
                     IconButton(

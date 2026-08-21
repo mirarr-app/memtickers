@@ -11,6 +11,7 @@ class Sticker {
     this.latitude,
     this.longitude,
     this.placeLabel,
+    this.tags = const [],
   });
 
   final String id;
@@ -24,6 +25,7 @@ class Sticker {
   final double rotation;
   final double scale;
   final int zIndex;
+  final List<String> tags;
 
   Sticker copyWith({
     String? imagePath,
@@ -36,6 +38,7 @@ class Sticker {
     double? rotation,
     double? scale,
     int? zIndex,
+    List<String>? tags,
     bool clearLocation = false,
   }) {
     return Sticker(
@@ -50,6 +53,7 @@ class Sticker {
       rotation: rotation ?? this.rotation,
       scale: scale ?? this.scale,
       zIndex: zIndex ?? this.zIndex,
+      tags: tags ?? this.tags,
     );
   }
 
@@ -69,7 +73,10 @@ class Sticker {
     };
   }
 
-  factory Sticker.fromMap(Map<String, Object?> map) {
+  factory Sticker.fromMap(
+    Map<String, Object?> map, {
+    List<String> tags = const [],
+  }) {
     return Sticker(
       id: map['id']! as String,
       imagePath: map['imagePath']! as String,
@@ -82,6 +89,7 @@ class Sticker {
       rotation: (map['rotation']! as num).toDouble(),
       scale: (map['scale']! as num).toDouble(),
       zIndex: map['zIndex']! as int,
+      tags: tags,
     );
   }
 }

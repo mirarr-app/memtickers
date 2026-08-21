@@ -50,3 +50,6 @@ app.*.map.json
 # AI and Agent Rules
 AGENTS.md
 .cursor/rules/
+
+# Project Notes
+project-notes/
