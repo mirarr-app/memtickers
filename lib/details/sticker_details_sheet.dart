@@ -125,6 +125,92 @@ class _StickerDetailsBody extends StatelessWidget {
     }
   }
 
+  Future<void> _moveStickerBoard(BuildContext context, Sticker sticker) async {
+    final boards = repository.boards;
+    if (boards.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Create another board first to move this sticker.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final selectedBoardId = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return SimpleDialog(
+          backgroundColor: scheme.surfaceContainerHigh,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
+          ),
+          title: Text(
+            'Move to Board',
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          children: [
+            for (final b in boards)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, b.id),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: MdSpacing.md,
+                  vertical: MdSpacing.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      b.id == sticker.boardId
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 20,
+                      color: b.id == sticker.boardId
+                          ? scheme.primary
+                          : scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        b.name,
+                        style: textTheme.bodyLarge?.copyWith(
+                          fontWeight: b.id == sticker.boardId
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: b.id == sticker.boardId
+                              ? scheme.primary
+                              : scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+
+    if (selectedBoardId != null &&
+        selectedBoardId != sticker.boardId &&
+        context.mounted) {
+      M3EHapticFeedback.medium.apply();
+      await repository.moveStickerToBoard(sticker.id, selectedBoardId);
+      final destName = boards.firstWhere((b) => b.id == selectedBoardId).name;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sticker moved to "$destName"'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -135,10 +221,16 @@ class _StickerDetailsBody extends StatelessWidget {
       listenable: repository,
       builder: (context, _) {
         final sticker =
-            repository.stickers
+            repository.allStickers
                 .where((s) => s.id == initialSticker.id)
                 .firstOrNull ??
             initialSticker;
+
+        final currentBoard =
+            repository.boards
+                .where((b) => b.id == sticker.boardId)
+                .firstOrNull ??
+            repository.activeBoard;
 
         final date = DateFormat.yMMMEd().format(sticker.createdAt);
         final time = DateFormat.jm().format(sticker.createdAt);
@@ -154,6 +246,12 @@ class _StickerDetailsBody extends StatelessWidget {
                 : 'Location not recorded');
 
         final rows = [
+          (
+            'Board',
+            currentBoard.name,
+            Icons.dashboard_outlined,
+            () => _moveStickerBoard(context, sticker),
+          ),
           (
             'Place',
             place,

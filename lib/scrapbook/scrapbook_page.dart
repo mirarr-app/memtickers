@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 
+import '../boards/boards_sheet.dart';
 import '../capture/capture_page.dart';
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
@@ -34,14 +35,18 @@ class _ScrapbookPageState extends State<ScrapbookPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final size = MediaQuery.sizeOf(context);
-      final start = Offset(
-        (kBoardSize - size.width) / 2,
-        (kBoardSize - size.height) / 2,
-      );
-      _transform.value = Matrix4.identity()
-        ..translateByDouble(-start.dx, -start.dy, 0, 1);
+      _centerCanvas();
     });
+  }
+
+  void _centerCanvas() {
+    final size = MediaQuery.sizeOf(context);
+    final start = Offset(
+      (kBoardSize - size.width) / 2,
+      (kBoardSize - size.height) / 2,
+    );
+    _transform.value = Matrix4.identity()
+      ..translateByDouble(-start.dx, -start.dy, 0, 1);
   }
 
   @override
@@ -158,6 +163,25 @@ class _ScrapbookPageState extends State<ScrapbookPage>
     });
   }
 
+  void _openBoards() {
+    showBoardsSheet(
+      context: context,
+      repository: widget.repository,
+      onBoardSelected: (board) {
+        setState(() {
+          _activeFilter = null;
+        });
+        final viewport = MediaQuery.sizeOf(context);
+        final centerMatrix = matrixForCenter(
+          const Offset(kBoardSize / 2, kBoardSize / 2),
+          viewport,
+          scale: 1.0,
+        );
+        _animateToMatrix(centerMatrix);
+      },
+    );
+  }
+
   void _openTags() {
     showTagsSheet(context: context, repository: widget.repository);
   }
@@ -175,6 +199,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
     final compact = MediaQuery.sizeOf(context).width < 600;
     final margin = compact ? MdSpacing.compactMargin : MdSpacing.mediumMargin;
     final isSearching = _isSearching;
+    final activeBoard = widget.repository.activeBoard;
 
     return Scaffold(
       body: Stack(
@@ -194,6 +219,67 @@ class _ScrapbookPageState extends State<ScrapbookPage>
               },
             ),
           ),
+
+          // Active Board Pill Indicator (Top Left)
+          if (!isSearching)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + MdSpacing.xs,
+              left: margin,
+              child: Material(
+                elevation: 3,
+                shadowColor: scheme.shadow.withValues(alpha: 0.18),
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                  onTap: () {
+                    M3EHapticFeedback.light.apply();
+                    _openBoards();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: MdSpacing.sm,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.dashboard_customize_rounded,
+                          size: 16,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(
+                            activeBoard.name,
+                            style: textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 16,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // Active Search Status Banner
           if (isSearching)
@@ -311,7 +397,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                       ),
                       const SizedBox(height: MdSpacing.md),
                       Text(
-                        'Peel a memory onto the board',
+                        'Peel a memory onto ${activeBoard.name}',
                         style: textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: scheme.onSurface,
@@ -320,7 +406,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                       ),
                       const SizedBox(height: MdSpacing.xs),
                       Text(
-                        'Capture photos and drop them as vinyl stickers on your infinite scrapbook canvas.',
+                        'Capture photos and drop them as vinyl stickers on this scrapbook board.',
                         style: textTheme.bodyMedium?.copyWith(
                           color: scheme.onSurfaceVariant,
                           height: 1.4,
@@ -411,6 +497,22 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                       },
                       icon: const Icon(Icons.camera_alt_rounded, size: 20),
                       label: const Text('Capture'),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    IconButton(
+                      tooltip: 'Boards',
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.surfaceContainerHigh,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
+                      onPressed: () {
+                        M3EHapticFeedback.light.apply();
+                        _openBoards();
+                      },
+                      icon: const Icon(
+                        Icons.dashboard_customize_outlined,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: MdSpacing.xs),
                     IconButton(

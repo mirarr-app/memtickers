@@ -1,6 +1,7 @@
 class Sticker {
   const Sticker({
     required this.id,
+    this.boardId = 'default',
     required this.imagePath,
     required this.createdAt,
     required this.x,
@@ -15,6 +16,7 @@ class Sticker {
   });
 
   final String id;
+  final String boardId;
   final String imagePath;
   final DateTime createdAt;
   final double? latitude;
@@ -28,6 +30,7 @@ class Sticker {
   final List<String> tags;
 
   Sticker copyWith({
+    String? boardId,
     String? imagePath,
     DateTime? createdAt,
     double? latitude,
@@ -43,6 +46,7 @@ class Sticker {
   }) {
     return Sticker(
       id: id,
+      boardId: boardId ?? this.boardId,
       imagePath: imagePath ?? this.imagePath,
       createdAt: createdAt ?? this.createdAt,
       latitude: clearLocation ? null : (latitude ?? this.latitude),
@@ -60,6 +64,7 @@ class Sticker {
   Map<String, Object?> toMap() {
     return {
       'id': id,
+      'boardId': boardId,
       'imagePath': imagePath,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'latitude': latitude,
@@ -79,6 +84,7 @@ class Sticker {
   }) {
     return Sticker(
       id: map['id']! as String,
+      boardId: (map['boardId'] as String?) ?? 'default',
       imagePath: map['imagePath']! as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']! as int),
       latitude: (map['latitude'] as num?)?.toDouble(),

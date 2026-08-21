@@ -390,6 +390,7 @@ class _CapturePageState extends State<CapturePage> {
     final jitter = (math.Random().nextDouble() - 0.5) * 0.18;
     final sticker = Sticker(
       id: id,
+      boardId: widget.repository.activeBoardId,
       imagePath: path,
       createdAt: meta.capturedAt,
       latitude: meta.latitude,

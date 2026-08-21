@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import 'sticker.dart';
+import 'sticker_board.dart';
 import 'sticker_database.dart';
 import 'sticker_settings.dart';
 import 'sticker_tag.dart';
@@ -14,11 +15,31 @@ import 'sticker_tag.dart';
 class StickerRepository extends ChangeNotifier {
   final List<Sticker> _stickers = [];
   final List<StickerTag> _tags = [];
+  final List<StickerBoard> _boards = [];
+  String _activeBoardId = 'default';
   StickerSettings _settings = const StickerSettings();
   Directory? _imagesDir;
 
-  List<Sticker> get stickers => List.unmodifiable(_stickers);
+  List<Sticker> get stickers =>
+      List.unmodifiable(_stickers.where((s) => s.boardId == _activeBoardId));
+  List<Sticker> get allStickers => List.unmodifiable(_stickers);
   List<StickerTag> get tags => List.unmodifiable(_tags);
+  List<StickerBoard> get boards => List.unmodifiable(_boards);
+  String get activeBoardId => _activeBoardId;
+
+  StickerBoard get activeBoard {
+    return _boards.firstWhere(
+      (b) => b.id == _activeBoardId,
+      orElse: () => _boards.isNotEmpty
+          ? _boards.first
+          : StickerBoard(
+              id: 'default',
+              name: 'Main Board',
+              createdAt: DateTime.now(),
+            ),
+    );
+  }
+
   StickerSettings get settings => _settings;
 
   Future<void> init() async {
@@ -28,6 +49,22 @@ class StickerRepository extends ChangeNotifier {
       await _imagesDir!.create(recursive: true);
     }
     final db = await StickerDatabase.instance();
+
+    // Load boards
+    final boardRows = await db.query('boards', orderBy: 'createdAt ASC');
+    _boards
+      ..clear()
+      ..addAll(boardRows.map(StickerBoard.fromMap));
+
+    if (_boards.isEmpty) {
+      final defaultBoard = StickerBoard(
+        id: 'default',
+        name: 'Main Board',
+        createdAt: DateTime.now(),
+      );
+      await db.insert('boards', defaultBoard.toMap());
+      _boards.add(defaultBoard);
+    }
 
     // Load tags
     final tagRows = await db.query('tags', orderBy: 'name COLLATE NOCASE ASC');
@@ -65,19 +102,157 @@ class StickerRepository extends ChangeNotifier {
       final settingsMap = <String, dynamic>{};
       for (final row in settingsRows) {
         final key = row['key'] as String;
-        final val = double.tryParse(row['value'] as String);
-        if (val != null) {
-          settingsMap[key] = val;
+        final value = row['value'] as String;
+        if (key == 'activeBoardId') {
+          if (_boards.any((b) => b.id == value)) {
+            _activeBoardId = value;
+          }
+        } else {
+          final val = double.tryParse(value);
+          if (val != null) {
+            settingsMap[key] = val;
+          }
         }
       }
       _settings = StickerSettings.fromMap(settingsMap);
     } catch (_) {}
 
+    if (!_boards.any((b) => b.id == _activeBoardId)) {
+      _activeBoardId = _boards.first.id;
+    }
+
     notifyListeners();
   }
 
   int getStickerCountForTag(String tagName) {
-    return _stickers.where((s) => s.tags.contains(tagName)).length;
+    return stickers.where((s) => s.tags.contains(tagName)).length;
+  }
+
+  int getStickerCountForBoard(String boardId) {
+    return _stickers.where((s) => s.boardId == boardId).length;
+  }
+
+  Future<void> setActiveBoard(String boardId) async {
+    if (_activeBoardId == boardId) return;
+    if (!_boards.any((b) => b.id == boardId)) return;
+    _activeBoardId = boardId;
+    final db = await StickerDatabase.instance();
+    await db.insert('settings', {
+      'key': 'activeBoardId',
+      'value': boardId,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    notifyListeners();
+  }
+
+  Future<StickerBoard> createBoard(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Board name cannot be empty');
+    }
+    final db = await StickerDatabase.instance();
+    final newBoard = StickerBoard(
+      id: const Uuid().v4(),
+      name: trimmed,
+      createdAt: DateTime.now(),
+    );
+    await db.insert(
+      'boards',
+      newBoard.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    _boards.add(newBoard);
+    _activeBoardId = newBoard.id;
+    await db.insert('settings', {
+      'key': 'activeBoardId',
+      'value': newBoard.id,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    notifyListeners();
+    return newBoard;
+  }
+
+  Future<void> updateBoard(String id, String newName) async {
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('Board name cannot be empty');
+    }
+    final index = _boards.indexWhere((b) => b.id == id);
+    if (index == -1) return;
+
+    final db = await StickerDatabase.instance();
+    await db.update(
+      'boards',
+      {'name': trimmed},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    _boards[index] = _boards[index].copyWith(name: trimmed);
+    notifyListeners();
+  }
+
+  Future<void> deleteBoard(String id) async {
+    if (_boards.length <= 1) {
+      throw StateError('Cannot delete the only remaining board');
+    }
+    final board = _boards.where((b) => b.id == id).firstOrNull;
+    if (board == null) return;
+
+    final db = await StickerDatabase.instance();
+
+    // Delete all stickers belonging to this board
+    final boardStickers = _stickers.where((s) => s.boardId == id).toList();
+    for (final sticker in boardStickers) {
+      await db.delete('stickers', where: 'id = ?', whereArgs: [sticker.id]);
+      await db.delete(
+        'sticker_tags',
+        where: 'stickerId = ?',
+        whereArgs: [sticker.id],
+      );
+      final file = File(sticker.imagePath);
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    }
+    _stickers.removeWhere((s) => s.boardId == id);
+
+    await db.delete('boards', where: 'id = ?', whereArgs: [id]);
+    _boards.removeWhere((b) => b.id == id);
+
+    if (_activeBoardId == id) {
+      _activeBoardId = _boards.first.id;
+      await db.insert('settings', {
+        'key': 'activeBoardId',
+        'value': _activeBoardId,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> moveStickerToBoard(
+    String stickerId,
+    String targetBoardId,
+  ) async {
+    if (!_boards.any((b) => b.id == targetBoardId)) return;
+    final index = _stickers.indexWhere((s) => s.id == stickerId);
+    if (index == -1) return;
+
+    final sticker = _stickers[index];
+    if (sticker.boardId == targetBoardId) return;
+
+    final updated = sticker.copyWith(boardId: targetBoardId);
+    final db = await StickerDatabase.instance();
+    await db.update(
+      'stickers',
+      {'boardId': targetBoardId},
+      where: 'id = ?',
+      whereArgs: [stickerId],
+    );
+
+    _stickers[index] = updated;
+    notifyListeners();
   }
 
   Future<StickerTag> createTag(String name) async {
@@ -190,15 +365,21 @@ class StickerRepository extends ChangeNotifier {
   }
 
   int nextZIndex() {
-    if (_stickers.isEmpty) return 0;
-    return _stickers.map((s) => s.zIndex).reduce((a, b) => a > b ? a : b) + 1;
+    final current = stickers;
+    if (current.isEmpty) return 0;
+    return current.map((s) => s.zIndex).reduce((a, b) => a > b ? a : b) + 1;
   }
 
   Future<void> save(Sticker sticker) async {
     final db = await StickerDatabase.instance();
+    final effectiveBoardId = sticker.boardId.isEmpty
+        ? _activeBoardId
+        : sticker.boardId;
+    final preparedSticker = sticker.copyWith(boardId: effectiveBoardId);
+
     await db.insert(
       'stickers',
-      sticker.toMap(),
+      preparedSticker.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
@@ -206,9 +387,9 @@ class StickerRepository extends ChangeNotifier {
     await db.delete(
       'sticker_tags',
       where: 'stickerId = ?',
-      whereArgs: [sticker.id],
+      whereArgs: [preparedSticker.id],
     );
-    final tagNames = sticker.tags;
+    final tagNames = preparedSticker.tags;
     final resolvedTags = <String>[];
 
     for (final name in tagNames) {
@@ -231,15 +412,15 @@ class StickerRepository extends ChangeNotifier {
         _tags.add(tag);
       }
       await db.insert('sticker_tags', {
-        'stickerId': sticker.id,
+        'stickerId': preparedSticker.id,
         'tagId': tag.id,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       resolvedTags.add(tag.name);
     }
     _tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
-    final updatedSticker = sticker.copyWith(tags: resolvedTags);
-    final index = _stickers.indexWhere((s) => s.id == sticker.id);
+    final updatedSticker = preparedSticker.copyWith(tags: resolvedTags);
+    final index = _stickers.indexWhere((s) => s.id == preparedSticker.id);
     if (index >= 0) {
       _stickers[index] = updatedSticker;
     } else {
@@ -296,7 +477,9 @@ class StickerRepository extends ChangeNotifier {
     if (existing != null) {
       final file = File(existing.imagePath);
       if (await file.exists()) {
-        await file.delete();
+        try {
+          await file.delete();
+        } catch (_) {}
       }
     }
     notifyListeners();
