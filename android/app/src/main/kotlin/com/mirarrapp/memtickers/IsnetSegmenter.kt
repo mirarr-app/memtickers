@@ -198,8 +198,8 @@ object IsnetSegmenter {
         // 7. Morphological Opening (Circular Erode r=1.5, Dilate r=1.5) to eliminate single-pixel wisps and noise
         val openedMaskPixels = morphologicalOpening(rawMaskPixels, MODEL_SIZE, MODEL_SIZE, radius = 1.5f)
 
-        // 8. Connected Component Analysis: keep primary subject and prune small detached junk islands
-        val cleanedMaskPixels = pruneDisconnectedIslands(openedMaskPixels, MODEL_SIZE, MODEL_SIZE, alphaThreshold = 24)
+        // 8. Connected Component Analysis & Topological Hole-Filling: keep primary subject, prune outer junk islands, and fill internal holes (e.g. eyes, pupils, dark features)
+        val cleanedMaskPixels = pruneIslandsAndFillInternalHoles(openedMaskPixels, MODEL_SIZE, MODEL_SIZE, alphaThreshold = 24)
 
         val mask1024 = Bitmap.createBitmap(cleanedMaskPixels, MODEL_SIZE, MODEL_SIZE, Bitmap.Config.ARGB_8888)
 
@@ -214,13 +214,16 @@ object IsnetSegmenter {
         scaledMask.getPixels(scaledMaskPixels, 0, srcW, 0, 0, srcW, srcH)
         scaledMask.recycle()
 
-        // 10. Fast Guided Filter: edge-aware refinement snapping alpha to physical RGB luminance edges
+        // 10. Compute solid interior mask to protect internal features (eyes, pupils, dark mouth, inner details) from guided filter erosion
+        val solidInterior = computeSolidInteriorMask(scaledMaskPixels, srcW, srcH, radius = 6)
+
+        // 11. Fast Guided Filter: edge-aware refinement snapping alpha to physical RGB luminance edges
         val guidedMaskPixels = fastGuidedFilter(srcPixels, scaledMaskPixels, srcW, srcH, radius = 8, eps = 0.001f, subsample = 2)
 
-        // 11. Sub-pixel Alpha Feathering & Anti-Aliasing (Gaussian blur + S-curve contrast boost)
+        // 12. Sub-pixel Alpha Feathering & Anti-Aliasing (Gaussian blur + S-curve contrast boost)
         val featheredMaskPixels = featherAndSmoothAlpha(guidedMaskPixels, srcW, srcH, radius = 1)
 
-        // 12. Composite mask alpha with original source pixels & compute bounds
+        // 13. Composite mask alpha with original source pixels & compute bounds
         val cutoutPixels = IntArray(srcW * srcH)
         var opaqueCount = 0
         var minX = srcW
@@ -231,7 +234,12 @@ object IsnetSegmenter {
         for (y in 0 until srcH) {
             for (x in 0 until srcW) {
                 val idx = y * srcW + x
-                val alpha = (featheredMaskPixels[idx] shr 24) and 0xFF
+                // If pixel is in solid interior, guarantee full 255 alpha (prevents any cutout of dark eyes/features)
+                val alpha = if (solidInterior[idx]) {
+                    255
+                } else {
+                    (featheredMaskPixels[idx] shr 24) and 0xFF
+                }
                 if (alpha > 24) {
                     opaqueCount++
                     if (x < minX) minX = x
@@ -416,7 +424,7 @@ object IsnetSegmenter {
         return smoothed
     }
 
-    private fun pruneDisconnectedIslands(
+    private fun pruneIslandsAndFillInternalHoles(
         maskPixels: IntArray,
         width: Int,
         height: Int,
@@ -427,9 +435,11 @@ object IsnetSegmenter {
         val componentSizes = ArrayList<Int>()
         val queue = IntArray(total)
 
+        // 1. Label connected foreground components
         for (y in 0 until height) {
+            val rowOffset = y * width
             for (x in 0 until width) {
-                val idx = y * width + x
+                val idx = rowOffset + x
                 val a = (maskPixels[idx] shr 24) and 0xFF
                 if (a >= alphaThreshold && labels[idx] == 0) {
                     val labelId = componentSizes.size + 1
@@ -485,16 +495,143 @@ object IsnetSegmenter {
         val maxComponentSize = componentSizes.maxOrNull() ?: 0
         val minAllowedSize = max(2000, (maxComponentSize * 0.12f).roundToInt())
 
-        val result = IntArray(total)
+        // 2. Identify kept foreground pixels (primary components)
+        val isKeptForeground = BooleanArray(total)
         for (i in 0 until total) {
             val lbl = labels[i]
             if (lbl > 0 && componentSizes[lbl - 1] >= minAllowedSize) {
-                result[i] = maskPixels[i]
-            } else {
-                result[i] = 0
+                isKeptForeground[i] = true
             }
         }
+
+        // 3. Flood-fill from image borders on inverted mask to identify true external background
+        val isExternalBg = BooleanArray(total)
+        var head = 0
+        var tail = 0
+
+        // Top and bottom borders
+        for (x in 0 until width) {
+            val topIdx = x
+            if (!isKeptForeground[topIdx] && !isExternalBg[topIdx]) {
+                isExternalBg[topIdx] = true
+                queue[tail++] = topIdx
+            }
+            val bottomIdx = (height - 1) * width + x
+            if (!isKeptForeground[bottomIdx] && !isExternalBg[bottomIdx]) {
+                isExternalBg[bottomIdx] = true
+                queue[tail++] = bottomIdx
+            }
+        }
+
+        // Left and right borders
+        for (y in 0 until height) {
+            val leftIdx = y * width
+            if (!isKeptForeground[leftIdx] && !isExternalBg[leftIdx]) {
+                isExternalBg[leftIdx] = true
+                queue[tail++] = leftIdx
+            }
+            val rightIdx = y * width + (width - 1)
+            if (!isKeptForeground[rightIdx] && !isExternalBg[rightIdx]) {
+                isExternalBg[rightIdx] = true
+                queue[tail++] = rightIdx
+            }
+        }
+
+        // BFS traversal across outer background
+        while (head < tail) {
+            val cur = queue[head++]
+            val cx = cur % width
+            val cy = cur / width
+
+            if (cx > 0) {
+                val n = cur - 1
+                if (!isKeptForeground[n] && !isExternalBg[n]) {
+                    isExternalBg[n] = true
+                    queue[tail++] = n
+                }
+            }
+            if (cx < width - 1) {
+                val n = cur + 1
+                if (!isKeptForeground[n] && !isExternalBg[n]) {
+                    isExternalBg[n] = true
+                    queue[tail++] = n
+                }
+            }
+            if (cy > 0) {
+                val n = cur - width
+                if (!isKeptForeground[n] && !isExternalBg[n]) {
+                    isExternalBg[n] = true
+                    queue[tail++] = n
+                }
+            }
+            if (cy < height - 1) {
+                val n = cur + width
+                if (!isKeptForeground[n] && !isExternalBg[n]) {
+                    isExternalBg[n] = true
+                    queue[tail++] = n
+                }
+            }
+        }
+
+        // 4. Fill internal holes & assemble cleaned solid mask
+        val result = IntArray(total)
+        for (i in 0 until total) {
+            if (isExternalBg[i]) {
+                // True external background -> 0
+                result[i] = 0
+            } else if (isKeptForeground[i]) {
+                // Foreground subject -> keep original anti-aliased mask alpha
+                val origAlpha = (maskPixels[i] shr 24) and 0xFF
+                val alpha = origAlpha.coerceIn(0, 255)
+                result[i] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
+            } else {
+                // Enclosed interior hole (e.g. black eye, dark pupil, dark mouth, inner shadows) -> solid foreground!
+                val alpha = 255
+                result[i] = (alpha shl 24) or (alpha shl 16) or (alpha shl 8) or alpha
+            }
+        }
+
         return result
+    }
+
+    private fun computeSolidInteriorMask(mask: IntArray, width: Int, height: Int, radius: Int = 6): BooleanArray {
+        val total = width * height
+        val temp = BooleanArray(total)
+        val solidInterior = BooleanArray(total)
+
+        // Horizontal min pass
+        for (y in 0 until height) {
+            val row = y * width
+            var solidStreak = 0
+            for (x in 0 until width) {
+                val a = (mask[row + x] shr 24) and 0xFF
+                if (a >= 250) {
+                    solidStreak++
+                } else {
+                    solidStreak = 0
+                }
+                if (solidStreak >= radius * 2 + 1) {
+                    temp[row + x - radius] = true
+                }
+            }
+        }
+
+        // Vertical min pass
+        for (x in 0 until width) {
+            var solidStreak = 0
+            for (y in 0 until height) {
+                if (temp[y * width + x]) {
+                    solidStreak++
+                } else {
+                    solidStreak = 0
+                }
+                if (solidStreak >= radius * 2 + 1) {
+                    solidInterior[(y - radius) * width + x] = true
+                }
+            }
+        }
+
+        return solidInterior
     }
 
     private fun fastGuidedFilter(
