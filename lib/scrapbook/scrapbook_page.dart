@@ -5,6 +5,8 @@ import '../capture/capture_page.dart';
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../details/sticker_details_sheet.dart';
+import '../search/search_sheet.dart';
+import '../search/sticker_search_filter.dart';
 import '../settings/sticker_settings_sheet.dart';
 import '../tags/tags_sheet.dart';
 import '../theme/spacing.dart';
@@ -19,9 +21,14 @@ class ScrapbookPage extends StatefulWidget {
   State<ScrapbookPage> createState() => _ScrapbookPageState();
 }
 
-class _ScrapbookPageState extends State<ScrapbookPage> {
+class _ScrapbookPageState extends State<ScrapbookPage>
+    with TickerProviderStateMixin {
   final _transform = TransformationController();
+  AnimationController? _matrixAnimationController;
   String? _droppingId;
+  StickerSearchFilter? _activeFilter;
+
+  bool get _isSearching => _activeFilter != null && _activeFilter!.isNotEmpty;
 
   @override
   void initState() {
@@ -39,8 +46,38 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
 
   @override
   void dispose() {
+    _matrixAnimationController?.dispose();
     _transform.dispose();
     super.dispose();
+  }
+
+  void _animateToMatrix(
+    Matrix4 targetMatrix, {
+    Duration duration = const Duration(milliseconds: 600),
+  }) {
+    _matrixAnimationController?.stop();
+    _matrixAnimationController?.dispose();
+
+    final startMatrix = _transform.value;
+    final controller = AnimationController(vsync: this, duration: duration);
+    _matrixAnimationController = controller;
+
+    final curved = CurvedAnimation(
+      parent: controller,
+      curve: Curves.easeInOutCubicEmphasized,
+    );
+    final matrixTween = Matrix4Tween(begin: startMatrix, end: targetMatrix);
+
+    controller.addListener(() {
+      _transform.value = matrixTween.evaluate(curved);
+    });
+
+    controller.forward().whenComplete(() {
+      controller.dispose();
+      if (_matrixAnimationController == controller) {
+        _matrixAnimationController = null;
+      }
+    });
   }
 
   Offset _dropPoint(Size viewport) {
@@ -75,6 +112,52 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
     );
   }
 
+  Future<void> _openSearch() async {
+    final result = await showStickerSearchSheet(
+      context: context,
+      repository: widget.repository,
+      initialFilter: _activeFilter,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _activeFilter = result);
+
+    if (result != null && result.isNotEmpty) {
+      final matching = widget.repository.stickers
+          .where((s) => result.matches(s))
+          .toList();
+      final viewport = MediaQuery.sizeOf(context);
+      final double targetScale = matching.length <= 4
+          ? 1.0
+          : (matching.length <= 9 ? 0.85 : 0.7);
+
+      final centerMatrix = matrixForCenter(
+        const Offset(kBoardSize / 2, kBoardSize / 2),
+        viewport,
+        scale: targetScale,
+      );
+      _animateToMatrix(centerMatrix);
+    }
+  }
+
+  void _onBundledStickerTap(Sticker sticker) {
+    M3EHapticFeedback.medium.apply();
+    setState(() {
+      _activeFilter = null;
+      _droppingId = sticker.id;
+    });
+
+    final viewport = MediaQuery.sizeOf(context);
+    final targetCenter = Offset(sticker.x + 84, sticker.y + 84);
+    final targetMatrix = matrixForCenter(targetCenter, viewport, scale: 1.0);
+    _animateToMatrix(targetMatrix);
+
+    Future<void>.delayed(const Duration(milliseconds: 1000), () {
+      if (mounted) setState(() => _droppingId = null);
+    });
+  }
+
   void _openTags() {
     showTagsSheet(context: context, repository: widget.repository);
   }
@@ -91,6 +174,7 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
     final empty = widget.repository.stickers.isEmpty;
     final compact = MediaQuery.sizeOf(context).width < 600;
     final margin = compact ? MdSpacing.compactMargin : MdSpacing.mediumMargin;
+    final isSearching = _isSearching;
 
     return Scaffold(
       body: Stack(
@@ -102,13 +186,95 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                 return ScrapbookCanvas(
                   repository: widget.repository,
                   transformationController: _transform,
+                  searchFilter: _activeFilter,
+                  onBundledStickerTap: _onBundledStickerTap,
                   droppingId: _droppingId,
                   onStickerTap: _openDetails,
                 );
               },
             ),
           ),
-          if (empty)
+
+          // Active Search Status Banner
+          if (isSearching)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + MdSpacing.xs,
+              left: margin,
+              right: margin,
+              child: Center(
+                child: Material(
+                  elevation: 6,
+                  shadowColor: scheme.shadow.withValues(alpha: 0.25),
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                    onTap: _openSearch,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        MdSpacing.sm,
+                        MdSpacing.xxs,
+                        MdSpacing.xxs,
+                        MdSpacing.xxs,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.search_rounded,
+                            size: 18,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: MdSpacing.xs),
+                          Flexible(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _activeFilter!.summaryDescription.isNotEmpty
+                                      ? _activeFilter!.summaryDescription
+                                      : 'Filtered Results',
+                                  style: textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.onSurface,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'Tap sticker to navigate on board',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: MdSpacing.xs),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18),
+                            tooltip: 'Exit search',
+                            style: IconButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.all(4),
+                              backgroundColor: scheme.surfaceContainerHigh,
+                            ),
+                            onPressed: () {
+                              M3EHapticFeedback.light.apply();
+                              setState(() => _activeFilter = null);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          if (empty && !isSearching)
             Center(
               child: SingleChildScrollView(
                 padding: EdgeInsets.symmetric(
@@ -245,6 +411,29 @@ class _ScrapbookPageState extends State<ScrapbookPage> {
                       },
                       icon: const Icon(Icons.camera_alt_rounded, size: 20),
                       label: const Text('Capture'),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    IconButton(
+                      tooltip: 'Search',
+                      style: IconButton.styleFrom(
+                        backgroundColor: isSearching
+                            ? scheme.primaryContainer
+                            : scheme.surfaceContainerHigh,
+                        foregroundColor: isSearching
+                            ? scheme.onPrimaryContainer
+                            : null,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
+                      onPressed: () {
+                        M3EHapticFeedback.light.apply();
+                        _openSearch();
+                      },
+                      icon: Icon(
+                        isSearching
+                            ? Icons.search_rounded
+                            : Icons.search_outlined,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: MdSpacing.xs),
                     IconButton(
