@@ -64,6 +64,13 @@ class _CapturePageState extends State<CapturePage> {
   bool _isFromGallery = false;
   int _processGeneration = 0;
 
+  // Flash and Zoom Controls
+  FlashMode _flashMode = FlashMode.off;
+  double _minZoom = 1.0;
+  double _maxZoom = 1.0;
+  double _currentZoom = 1.0;
+  double _baseZoom = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -99,7 +106,7 @@ class _CapturePageState extends State<CapturePage> {
       _modelReady = status.ready;
       _modelFailed = status.failed;
       if (status.ready) {
-        _status = _busy ? 'Cutting the subject out\u2026' : null;
+        _status = _busy ? 'Cutting the subject out…' : null;
       } else {
         _status = status.message;
       }
@@ -123,9 +130,28 @@ class _CapturePageState extends State<CapturePage> {
         await controller.dispose();
         return;
       }
+
+      double minZoom = 1.0;
+      double maxZoom = 1.0;
+      try {
+        minZoom = await controller.getMinZoomLevel();
+        maxZoom = await controller.getMaxZoomLevel();
+        if (maxZoom < minZoom) maxZoom = minZoom;
+      } catch (_) {}
+
+      try {
+        await controller.setFlashMode(_flashMode);
+      } catch (_) {
+        _flashMode = FlashMode.off;
+      }
+
       setState(() {
         _camera = controller;
         _cameraReady = true;
+        _minZoom = minZoom;
+        _maxZoom = maxZoom;
+        _currentZoom = minZoom.clamp(1.0, maxZoom);
+        _baseZoom = _currentZoom;
       });
       unawaited(_refreshGpsChip());
     } catch (_) {
@@ -148,6 +174,64 @@ class _CapturePageState extends State<CapturePage> {
     final status = await Permission.locationWhenInUse.request();
     if (!mounted) return;
     setState(() => _hasGps = status.isGranted);
+  }
+
+  Future<void> _toggleFlash() async {
+    final camera = _camera;
+    if (camera == null || !camera.value.isInitialized) return;
+    M3EHapticFeedback.light.apply();
+    final targetMode = _flashMode == FlashMode.off
+        ? FlashMode.always
+        : FlashMode.off;
+    try {
+      await camera.setFlashMode(targetMode);
+      if (!mounted) return;
+      setState(() {
+        _flashMode = targetMode;
+      });
+    } catch (_) {
+      try {
+        final fallback = _flashMode == FlashMode.off
+            ? FlashMode.torch
+            : FlashMode.off;
+        await camera.setFlashMode(fallback);
+        if (!mounted) return;
+        setState(() {
+          _flashMode = fallback;
+        });
+      } catch (_) {
+        if (!mounted) return;
+        _snack('Flash is not supported on this camera.');
+      }
+    }
+  }
+
+  Future<void> _setZoom(double zoom) async {
+    final camera = _camera;
+    if (camera == null || !camera.value.isInitialized) return;
+    final clamped = zoom.clamp(_minZoom, _maxZoom);
+    if ((clamped - _currentZoom).abs() < 0.005) return;
+    setState(() {
+      _currentZoom = clamped;
+    });
+    try {
+      await camera.setZoomLevel(clamped);
+    } catch (_) {}
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _baseZoom = _currentZoom;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (_minZoom >= _maxZoom) return;
+    final targetZoom = (_baseZoom * details.scale).clamp(_minZoom, _maxZoom);
+    if ((targetZoom - _currentZoom).abs() >= 0.01) {
+      setState(() {
+        _currentZoom = targetZoom;
+      });
+      _camera?.setZoomLevel(targetZoom);
+    }
   }
 
   Future<void> _shutter() async {
@@ -202,8 +286,8 @@ class _CapturePageState extends State<CapturePage> {
       _busy = true;
       _takingPicture = false;
       _status = _modelReady
-          ? 'Cutting the subject out\u2026'
-          : 'Loading cutout model\u2026';
+          ? 'Cutting the subject out…'
+          : 'Loading cutout model…';
       _previewPng = null;
       _selectedTags.clear();
       _isFromGallery = isFromGallery;
@@ -218,7 +302,7 @@ class _CapturePageState extends State<CapturePage> {
       );
       if (!mounted || _processGeneration != gen) return;
 
-      setState(() => _status = 'Adding the vinyl backing\u2026');
+      setState(() => _status = 'Adding the vinyl backing…');
       final dieCut = await _processor.dieCut(cutout);
       if (!mounted || _processGeneration != gen) return;
 
@@ -326,7 +410,7 @@ class _CapturePageState extends State<CapturePage> {
   Future<void> _retake() async {
     final wasFromGallery = _isFromGallery;
     try {
-      _camera?.resumePreview();
+      await _camera?.resumePreview();
     } catch (_) {}
     setState(() {
       _previewPng = null;
@@ -356,6 +440,7 @@ class _CapturePageState extends State<CapturePage> {
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     final preview = _previewPng;
+    final isFlashOn = _flashMode != FlashMode.off;
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -367,7 +452,22 @@ class _CapturePageState extends State<CapturePage> {
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         actions: [
-          if (preview == null)
+          if (preview == null) ...[
+            if (_cameraReady && _camera != null)
+              Padding(
+                padding: const EdgeInsets.only(right: MdSpacing.xxs),
+                child: ActionChip(
+                  avatar: Icon(
+                    isFlashOn
+                        ? Icons.flash_on_rounded
+                        : Icons.flash_off_rounded,
+                    size: 16,
+                    color: isFlashOn ? scheme.primary : scheme.onSurfaceVariant,
+                  ),
+                  label: Text(isFlashOn ? 'Flash on' : 'Flash off'),
+                  onPressed: _toggleFlash,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.only(right: MdSpacing.xs),
               child: ActionChip(
@@ -385,6 +485,7 @@ class _CapturePageState extends State<CapturePage> {
                 },
               ),
             ),
+          ],
         ],
       ),
       body: SafeArea(
@@ -401,7 +502,7 @@ class _CapturePageState extends State<CapturePage> {
                       ),
                       const SizedBox(height: MdSpacing.lg),
                       Text(
-                        _status ?? 'Cutting the subject out\u2026',
+                        _status ?? 'Cutting the subject out…',
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
@@ -409,7 +510,7 @@ class _CapturePageState extends State<CapturePage> {
                       ),
                       const SizedBox(height: MdSpacing.xs),
                       Text(
-                        'Isolating subject and creating vinyl border\u2026',
+                        'Isolating subject and creating vinyl border…',
                         style: textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -509,27 +610,94 @@ class _CapturePageState extends State<CapturePage> {
                                 ],
                               )
                             : _cameraReady && _camera != null
-                            ? Stack(
-                                fit: StackFit.expand,
-                                children: [
-                                  CameraPreview(_camera!),
-                                  // Subtle framing corners
-                                  IgnorePointer(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(
-                                          MdSpacing.radiusXlIncreased,
-                                        ),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.15,
+                            ? GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onScaleStart: _onScaleStart,
+                                onScaleUpdate: _onScaleUpdate,
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    CameraPreview(_camera!),
+                                    // Subtle framing corners
+                                    IgnorePointer(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            MdSpacing.radiusXlIncreased,
                                           ),
-                                          width: 1.5,
+                                          border: Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.15,
+                                            ),
+                                            width: 1.5,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    // Pinch zoom indicator & quick toggle chip
+                                    if (_maxZoom > _minZoom)
+                                      Positioned(
+                                        bottom: MdSpacing.sm,
+                                        left: 0,
+                                        right: 0,
+                                        child: Center(
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              M3EHapticFeedback.light.apply();
+                                              if (_currentZoom > 1.05) {
+                                                _setZoom(_minZoom);
+                                              } else if (_maxZoom >= 2.0) {
+                                                _setZoom(2.0);
+                                              } else {
+                                                _setZoom(_maxZoom);
+                                              }
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: MdSpacing.sm,
+                                                    vertical: MdSpacing.xxs,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.6,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                      MdSpacing.radiusFull,
+                                                    ),
+                                                border: Border.all(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.25),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.zoom_in_rounded,
+                                                    size: 14,
+                                                    color: Colors.white70,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    '${_currentZoom.toStringAsFixed(1)}×',
+                                                    style: textTheme.labelSmall
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Colors.white,
+                                                          letterSpacing: 0.5,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               )
                             : Center(
                                 child: Padding(
