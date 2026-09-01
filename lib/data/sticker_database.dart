@@ -13,17 +13,18 @@ class StickerDatabase {
     final path = p.join(docs.path, 'memtickers.db');
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  createdAt INTEGER NOT NULL
+  createdAt INTEGER NOT NULL,
+  isNavigationMode INTEGER NOT NULL DEFAULT 0
 )
 ''');
         await db.execute('''
-INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch})
+INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch}, 0)
 ''');
         await db.execute('''
 CREATE TABLE stickers (
@@ -112,17 +113,25 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
 )
 ''');
         }
+        if (oldVersion < 5) {
+          try {
+            await db.execute(
+              "ALTER TABLE boards ADD COLUMN isNavigationMode INTEGER NOT NULL DEFAULT 0",
+            );
+          } catch (_) {}
+        }
       },
       onOpen: (db) async {
         await db.execute('''
 CREATE TABLE IF NOT EXISTS boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  createdAt INTEGER NOT NULL
+  createdAt INTEGER NOT NULL,
+  isNavigationMode INTEGER NOT NULL DEFAULT 0
 )
 ''');
         await db.execute('''
-INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch})
+INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch}, 0)
 ''');
         await db.execute('''
 CREATE TABLE IF NOT EXISTS settings (
@@ -154,6 +163,11 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
         try {
           await db.execute(
             "ALTER TABLE stickers ADD COLUMN boardId TEXT NOT NULL DEFAULT 'default'",
+          );
+        } catch (_) {}
+        try {
+          await db.execute(
+            "ALTER TABLE boards ADD COLUMN isNavigationMode INTEGER NOT NULL DEFAULT 0",
           );
         } catch (_) {}
       },

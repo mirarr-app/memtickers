@@ -9,14 +9,20 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('StickerBoard model', () {
-    test('toMap and fromMap', () {
+    test('toMap and fromMap with isNavigationMode', () {
       final now = DateTime.now();
-      final board = StickerBoard(id: 'b-1', name: 'Japan 2026', createdAt: now);
+      final board = StickerBoard(
+        id: 'b-1',
+        name: 'Japan 2026',
+        createdAt: now,
+        isNavigationMode: true,
+      );
 
       final map = board.toMap();
       expect(map['id'], 'b-1');
       expect(map['name'], 'Japan 2026');
       expect(map['createdAt'], now.millisecondsSinceEpoch);
+      expect(map['isNavigationMode'], 1);
 
       final restored = StickerBoard.fromMap(map);
       expect(restored.id, 'b-1');
@@ -25,17 +31,24 @@ void main() {
         restored.createdAt.millisecondsSinceEpoch,
         now.millisecondsSinceEpoch,
       );
+      expect(restored.isNavigationMode, true);
     });
 
-    test('copyWith', () {
+    test('copyWith isNavigationMode', () {
       final board = StickerBoard(
         id: 'b-1',
         name: 'Road Trip',
         createdAt: DateTime(2026, 1, 1),
       );
-      final updated = board.copyWith(name: 'California Trip');
+      expect(board.isNavigationMode, false);
+
+      final updated = board.copyWith(
+        name: 'California Trip',
+        isNavigationMode: true,
+      );
       expect(updated.id, 'b-1');
       expect(updated.name, 'California Trip');
+      expect(updated.isNavigationMode, true);
       expect(updated.createdAt, board.createdAt);
     });
   });
@@ -121,7 +134,7 @@ void main() {
 
       expect(find.text('Boards'), findsOneWidget);
       expect(
-        find.text('Switch between or create separate scrapbooks'),
+        find.text('Switch between, manage, or lock boards in navigation mode'),
         findsOneWidget,
       );
       expect(find.text('New board name…'), findsOneWidget);

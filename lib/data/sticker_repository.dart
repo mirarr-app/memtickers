@@ -207,6 +207,29 @@ class StickerRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBoardNavigationMode(String id, bool isNavigationMode) async {
+    final index = _boards.indexWhere((b) => b.id == id);
+    if (index == -1) return;
+    if (_boards[index].isNavigationMode == isNavigationMode) return;
+
+    final db = await StickerDatabase.instance();
+    await db.update(
+      'boards',
+      {'isNavigationMode': isNavigationMode ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    _boards[index] = _boards[index].copyWith(isNavigationMode: isNavigationMode);
+    notifyListeners();
+  }
+
+  Future<void> toggleBoardNavigationMode(String id) async {
+    final index = _boards.indexWhere((b) => b.id == id);
+    if (index == -1) return;
+    await setBoardNavigationMode(id, !_boards[index].isNavigationMode);
+  }
+
   Future<void> deleteBoard(String id) async {
     if (_boards.length <= 1) {
       throw StateError('Cannot delete the only remaining board');

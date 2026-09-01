@@ -90,6 +90,27 @@ class _ScrapbookPageState extends State<ScrapbookPage>
   }
 
   Future<void> _openCapture({required bool gallery}) async {
+    if (widget.repository.activeBoard.isNavigationMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '"${widget.repository.activeBoard.name}" is in navigation mode (locked).',
+          ),
+          action: SnackBarAction(
+            label: 'Unlock',
+            onPressed: () {
+              widget.repository.setBoardNavigationMode(
+                widget.repository.activeBoardId,
+                false,
+              );
+            },
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
     final size = MediaQuery.sizeOf(context);
     final drop = _dropPoint(size);
     final result = await Navigator.of(context).push<CaptureResult>(
@@ -290,6 +311,59 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                               M3EHapticFeedback.light.apply();
                               setState(() => _activeFilter = null);
                             },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // Active Navigation Mode Pill Banner
+          if (!isSearching && activeBoard.isNavigationMode)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + MdSpacing.xs,
+              left: margin,
+              right: margin,
+              child: Center(
+                child: Material(
+                  elevation: 4,
+                  shadowColor: scheme.shadow.withValues(alpha: 0.2),
+                  color: scheme.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                    onTap: _openBoards,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: MdSpacing.sm,
+                        vertical: MdSpacing.xxs + 3,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.lock_rounded,
+                            size: 16,
+                            color: scheme.onTertiaryContainer,
+                          ),
+                          const SizedBox(width: MdSpacing.xs),
+                          Text(
+                            activeBoard.name,
+                            style: textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.onTertiaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '• Navigation Mode (Locked)',
+                            style: textTheme.labelSmall?.copyWith(
+                              color: scheme.onTertiaryContainer.withValues(
+                                alpha: 0.85,
+                              ),
+                            ),
                           ),
                         ],
                       ),

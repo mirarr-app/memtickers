@@ -201,13 +201,15 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
       );
     }
 
+    final isNavigationMode = widget.repository.activeBoard.isNavigationMode;
+
     return InteractiveViewer(
       transformationController: widget.transformationController,
       constrained: false,
       minScale: 0.35,
       maxScale: 3.5,
-      panEnabled: _activeId == null,
-      scaleEnabled: _activeId == null,
+      panEnabled: isNavigationMode || _activeId == null,
+      scaleEnabled: isNavigationMode || _activeId == null,
       boundaryMargin: const EdgeInsets.all(300),
       child: SizedBox(
         width: kBoardSize,
@@ -225,68 +227,80 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                     angle: sticker.rotation,
                     child: Transform.scale(
                       scale: sticker.scale,
-                      child: Listener(
-                        onPointerDown: (_) {
-                          setState(() {
-                            _pointers++;
-                            _activeId = sticker.id;
-                          });
-                        },
-                        onPointerUp: (_) {
-                          setState(() {
-                            _pointers = (_pointers - 1).clamp(0, 8);
-                            if (_pointers == 0) _activeId = null;
-                          });
-                        },
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onScaleStart: (details) {
-                            _lastFocal = details.focalPoint;
-                            _startScale = sticker.scale;
-                            _startRotation = sticker.rotation;
-                          },
-                          onScaleUpdate: (details) {
-                            if (_activeId != sticker.id) return;
-                            final current = widget.repository.stickers
-                                .where((s) => s.id == sticker.id)
-                                .firstOrNull;
-                            if (current == null) return;
-                            final last = _lastFocal ?? details.focalPoint;
-                            final delta = details.focalPoint - last;
-                            _lastFocal = details.focalPoint;
-                            final scale = widget.transformationController.value
-                                .getMaxScaleOnAxis();
-                            final sceneDelta = delta / scale;
-                            var nextScale = _startScale * details.scale;
-                            nextScale = nextScale.clamp(0.45, 2.8);
-                            final next = current.copyWith(
-                              x: current.x + sceneDelta.dx,
-                              y: current.y + sceneDelta.dy,
-                              scale: nextScale,
-                              rotation: _startRotation + details.rotation,
-                            );
-                            widget.repository.updateTransform(next);
-                          },
-                          onScaleEnd: (_) {
-                            _lastFocal = null;
-                            final current = widget.repository.stickers
-                                .where((s) => s.id == sticker.id)
-                                .firstOrNull;
-                            if (current != null) _persist(current);
-                          },
-                          child: StickerObject(
-                            key: ValueKey('object-${sticker.id}'),
-                            sticker: sticker,
-                            selected: _selectedId == sticker.id,
-                            dropping: widget.droppingId == sticker.id,
-                            onTap: () {
-                              setState(() => _selectedId = sticker.id);
-                              widget.onStickerTap(sticker);
-                            },
-                            onLongPress: () => _bringToFront(sticker),
-                          ),
-                        ),
-                      ),
+                      child: isNavigationMode
+                          ? StickerObject(
+                              key: ValueKey('object-${sticker.id}'),
+                              sticker: sticker,
+                              selected: _selectedId == sticker.id,
+                              dropping: widget.droppingId == sticker.id,
+                              onTap: () {
+                                setState(() => _selectedId = sticker.id);
+                                widget.onStickerTap(sticker);
+                              },
+                              onLongPress: () {},
+                            )
+                          : Listener(
+                              onPointerDown: (_) {
+                                setState(() {
+                                  _pointers++;
+                                  _activeId = sticker.id;
+                                });
+                              },
+                              onPointerUp: (_) {
+                                setState(() {
+                                  _pointers = (_pointers - 1).clamp(0, 8);
+                                  if (_pointers == 0) _activeId = null;
+                                });
+                              },
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onScaleStart: (details) {
+                                  _lastFocal = details.focalPoint;
+                                  _startScale = sticker.scale;
+                                  _startRotation = sticker.rotation;
+                                },
+                                onScaleUpdate: (details) {
+                                  if (_activeId != sticker.id) return;
+                                  final current = widget.repository.stickers
+                                      .where((s) => s.id == sticker.id)
+                                      .firstOrNull;
+                                  if (current == null) return;
+                                  final last = _lastFocal ?? details.focalPoint;
+                                  final delta = details.focalPoint - last;
+                                  _lastFocal = details.focalPoint;
+                                  final scale = widget.transformationController.value
+                                      .getMaxScaleOnAxis();
+                                  final sceneDelta = delta / scale;
+                                  var nextScale = _startScale * details.scale;
+                                  nextScale = nextScale.clamp(0.45, 2.8);
+                                  final next = current.copyWith(
+                                    x: current.x + sceneDelta.dx,
+                                    y: current.y + sceneDelta.dy,
+                                    scale: nextScale,
+                                    rotation: _startRotation + details.rotation,
+                                  );
+                                  widget.repository.updateTransform(next);
+                                },
+                                onScaleEnd: (_) {
+                                  _lastFocal = null;
+                                  final current = widget.repository.stickers
+                                      .where((s) => s.id == sticker.id)
+                                      .firstOrNull;
+                                  if (current != null) _persist(current);
+                                },
+                                child: StickerObject(
+                                  key: ValueKey('object-${sticker.id}'),
+                                  sticker: sticker,
+                                  selected: _selectedId == sticker.id,
+                                  dropping: widget.droppingId == sticker.id,
+                                  onTap: () {
+                                    setState(() => _selectedId = sticker.id);
+                                    widget.onStickerTap(sticker);
+                                  },
+                                  onLongPress: () => _bringToFront(sticker),
+                                ),
+                              ),
+                            ),
                     ),
                   ),
                 ),

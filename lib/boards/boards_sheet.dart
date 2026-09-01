@@ -377,7 +377,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                           ),
                         ),
                         Text(
-                          'Switch between or create separate scrapbooks',
+                          'Switch between, manage, or lock boards in navigation mode',
                           style: textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -501,7 +501,9 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                 child: Icon(
                                   isActive
                                       ? Icons.check_rounded
-                                      : Icons.dashboard_outlined,
+                                      : (board.isNavigationMode
+                                          ? Icons.lock_outline_rounded
+                                          : Icons.dashboard_outlined),
                                   size: 18,
                                   color: isActive
                                       ? scheme.onPrimary
@@ -557,19 +559,100 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                             ),
                                           ),
                                         ],
+                                        if (board.isNavigationMode) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: scheme.tertiaryContainer,
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    MdSpacing.radiusFull,
+                                                  ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  Icons.lock_rounded,
+                                                  size: 10,
+                                                  color: scheme.onTertiaryContainer,
+                                                ),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  'NAV MODE',
+                                                  style: textTheme.labelSmall
+                                                      ?.copyWith(
+                                                        color: scheme
+                                                            .onTertiaryContainer,
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        letterSpacing: 0.5,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      count == 1
-                                          ? '1 memory sticker'
-                                          : '$count memory stickers',
+                                      board.isNavigationMode
+                                          ? '${count == 1 ? '1 sticker' : '$count stickers'} • Locked (Nav Mode)'
+                                          : (count == 1
+                                              ? '1 memory sticker'
+                                              : '$count memory stickers'),
                                       style: textTheme.bodySmall?.copyWith(
-                                        color: scheme.onSurfaceVariant,
+                                        color: board.isNavigationMode
+                                            ? scheme.tertiary
+                                            : scheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ],
                                 ),
+                              ),
+                              IconButton(
+                                tooltip: board.isNavigationMode
+                                    ? 'Unlock board (Exit navigation mode)'
+                                    : 'Lock board (Enable navigation mode)',
+                                icon: Icon(
+                                  board.isNavigationMode
+                                      ? Icons.lock_rounded
+                                      : Icons.lock_open_rounded,
+                                  size: 18,
+                                  color: board.isNavigationMode
+                                      ? scheme.tertiary
+                                      : scheme.onSurfaceVariant,
+                                ),
+                                style: IconButton.styleFrom(
+                                  padding: const EdgeInsets.all(6),
+                                  minimumSize: const Size(32, 32),
+                                  backgroundColor: board.isNavigationMode
+                                      ? scheme.tertiaryContainer.withValues(alpha: 0.5)
+                                      : null,
+                                ),
+                                onPressed: () async {
+                                  M3EHapticFeedback.medium.apply();
+                                  final willEnable = !board.isNavigationMode;
+                                  await widget.repository.toggleBoardNavigationMode(board.id);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          willEnable
+                                              ? 'Navigation mode enabled for "${board.name}". Stickers are locked.'
+                                              : 'Navigation mode disabled for "${board.name}". Stickers can be edited.',
+                                        ),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
                               IconButton(
                                 tooltip: 'Edit board name',

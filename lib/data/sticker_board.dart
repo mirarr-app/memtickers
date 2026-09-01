@@ -3,17 +3,24 @@ class StickerBoard {
     required this.id,
     required this.name,
     required this.createdAt,
+    this.isNavigationMode = false,
   });
 
   final String id;
   final String name;
   final DateTime createdAt;
+  final bool isNavigationMode;
 
-  StickerBoard copyWith({String? name, DateTime? createdAt}) {
+  StickerBoard copyWith({
+    String? name,
+    DateTime? createdAt,
+    bool? isNavigationMode,
+  }) {
     return StickerBoard(
       id: id,
       name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
+      isNavigationMode: isNavigationMode ?? this.isNavigationMode,
     );
   }
 
@@ -22,6 +29,7 @@ class StickerBoard {
       'id': id,
       'name': name,
       'createdAt': createdAt.millisecondsSinceEpoch,
+      'isNavigationMode': isNavigationMode ? 1 : 0,
     };
   }
 
@@ -30,6 +38,7 @@ class StickerBoard {
       id: map['id']! as String,
       name: map['name']! as String,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt']! as int),
+      isNavigationMode: (map['isNavigationMode'] as int? ?? 0) == 1,
     );
   }
 }
