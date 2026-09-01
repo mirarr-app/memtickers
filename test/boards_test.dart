@@ -6,6 +6,7 @@ import 'package:memtickers/data/sticker_board.dart';
 import 'package:memtickers/data/sticker_repository.dart';
 
 import 'package:memtickers/details/sticker_details_sheet.dart';
+import 'package:memtickers/scrapbook/scrapbook_page.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -341,6 +342,144 @@ void main() {
       expect(repo.boards.any((b) => b.name == 'Vacation 2026'), isTrue);
       final newBoard = repo.boards.firstWhere((b) => b.name == 'Vacation 2026');
       expect(repo.allStickers.first.boardId, newBoard.id);
+    });
+  });
+
+  group('Navigation Mode UI in ScrapbookPage', () {
+    testWidgets('shows small lock icon on top right and no pillbar when locked', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final lockedBoard = StickerBoard(
+        id: 'b-locked',
+        name: 'My Locked Memories',
+        createdAt: DateTime(2026, 1, 1),
+        isNavigationMode: true,
+      );
+
+      repo.populateForTesting(
+        stickers: [],
+        boards: [lockedBoard],
+        activeBoardId: 'b-locked',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: ScrapbookPage(repository: repo),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Ensure no pillbar text with board name or navigation mode text
+      expect(find.text('• Navigation Mode (Locked)'), findsNothing);
+      expect(find.text('My Locked Memories • Navigation Mode (Locked)'), findsNothing);
+
+      // Verify lock icon is present with tooltip
+      expect(
+        find.widgetWithIcon(Tooltip, Icons.lock_rounded),
+        findsOneWidget,
+      );
+
+      // Verify tapping lock icon opens boards sheet
+      await tester.tap(find.widgetWithIcon(Tooltip, Icons.lock_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Boards'), findsOneWidget);
+    });
+
+    testWidgets('does not show lock icon when navigation mode is disabled', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final unlockedBoard = StickerBoard(
+        id: 'b-unlocked',
+        name: 'Open Board',
+        createdAt: DateTime(2026, 1, 1),
+        isNavigationMode: false,
+      );
+
+      repo.populateForTesting(
+        stickers: [],
+        boards: [unlockedBoard],
+        activeBoardId: 'b-unlocked',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: ScrapbookPage(repository: repo),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithIcon(Tooltip, Icons.lock_rounded),
+        findsNothing,
+      );
+      expect(find.text('• Navigation Mode (Locked)'), findsNothing);
+    });
+
+    testWidgets('unlocking and locking from the board menu updates ScrapbookPage immediately', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final board = StickerBoard(
+        id: 'b-main',
+        name: 'My Board',
+        createdAt: DateTime(2026, 1, 1),
+        isNavigationMode: false,
+      );
+
+      repo.populateForTesting(
+        stickers: [],
+        boards: [board],
+        activeBoardId: 'b-main',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: ScrapbookPage(repository: repo),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Initially unlocked: no lock icon on ScrapbookPage
+      expect(find.byTooltip('Navigation mode (locked)'), findsNothing);
+
+      // Open boards sheet via bottom toolbar
+      await tester.tap(find.byTooltip('Boards'));
+      await tester.pumpAndSettle();
+
+      // Tap lock button on board in sheet
+      await tester.tap(find.byTooltip('Lock board (Enable navigation mode)'));
+      await tester.pumpAndSettle();
+
+      // ScrapbookPage now has lock icon immediately
+      expect(find.byTooltip('Navigation mode (locked)'), findsOneWidget);
+
+      // Tap unlock button in sheet
+      await tester.tap(find.byTooltip('Unlock board (Exit navigation mode)'));
+      await tester.pumpAndSettle();
+
+      // ScrapbookPage immediately removes lock icon
+      expect(find.byTooltip('Navigation mode (locked)'), findsNothing);
     });
   });
 }

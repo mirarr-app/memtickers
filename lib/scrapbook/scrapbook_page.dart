@@ -216,30 +216,29 @@ class _ScrapbookPageState extends State<ScrapbookPage>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final empty = widget.repository.stickers.isEmpty;
     final compact = MediaQuery.sizeOf(context).width < 600;
     final margin = compact ? MdSpacing.compactMargin : MdSpacing.mediumMargin;
     final isSearching = _isSearching;
-    final activeBoard = widget.repository.activeBoard;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: ListenableBuilder(
-              listenable: widget.repository,
-              builder: (context, _) {
-                return ScrapbookCanvas(
+      body: ListenableBuilder(
+        listenable: widget.repository,
+        builder: (context, _) {
+          final activeBoard = widget.repository.activeBoard;
+          final empty = widget.repository.stickers.isEmpty;
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: ScrapbookCanvas(
                   repository: widget.repository,
                   transformationController: _transform,
                   searchFilter: _activeFilter,
                   onBundledStickerTap: _onBundledStickerTap,
                   droppingId: _droppingId,
                   onStickerTap: _openDetails,
-                );
-              },
-            ),
-          ),
+                ),
+              ),
 
           // Active Search Status Banner
           if (isSearching)
@@ -320,52 +319,30 @@ class _ScrapbookPageState extends State<ScrapbookPage>
               ),
             ),
 
-          // Active Navigation Mode Pill Banner
-          if (!isSearching && activeBoard.isNavigationMode)
+          // Active Navigation Mode Lock Indicator
+          if (activeBoard.isNavigationMode)
             Positioned(
               top: MediaQuery.paddingOf(context).top + MdSpacing.xs,
-              left: margin,
               right: margin,
-              child: Center(
+              child: Tooltip(
+                message: 'Navigation mode (locked)',
                 child: Material(
-                  elevation: 4,
+                  elevation: 3,
                   shadowColor: scheme.shadow.withValues(alpha: 0.2),
                   color: scheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
+                  shape: const CircleBorder(),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
-                    onTap: _openBoards,
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      M3EHapticFeedback.light.apply();
+                      _openBoards();
+                    },
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: MdSpacing.sm,
-                        vertical: MdSpacing.xxs + 3,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.lock_rounded,
-                            size: 16,
-                            color: scheme.onTertiaryContainer,
-                          ),
-                          const SizedBox(width: MdSpacing.xs),
-                          Text(
-                            activeBoard.name,
-                            style: textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onTertiaryContainer,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '• Navigation Mode (Locked)',
-                            style: textTheme.labelSmall?.copyWith(
-                              color: scheme.onTertiaryContainer.withValues(
-                                alpha: 0.85,
-                              ),
-                            ),
-                          ),
-                        ],
+                      padding: const EdgeInsets.all(MdSpacing.xs),
+                      child: Icon(
+                        Icons.lock_rounded,
+                        size: 18,
+                        color: scheme.onTertiaryContainer,
                       ),
                     ),
                   ),
@@ -582,7 +559,9 @@ class _ScrapbookPageState extends State<ScrapbookPage>
             ),
           ),
         ],
-      ),
-    );
+      );
+    },
+  ),
+);
   }
 }
