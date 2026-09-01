@@ -640,6 +640,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
+  paper_shaders:
+    dependency: "direct main"
+    description:
+      name: paper_shaders
+      sha256: c7aff1c550d7222a3b5e8c78119b6ee2d257d13e99d06b97ff3b7afd2a735475
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.3"
   path:
     dependency: "direct main"
     description:

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../data/sticker_repository.dart';
 import '../tags/tag_selection_sheet.dart';
 import '../theme/spacing.dart';
 import 'auto_tag_service.dart';
+import 'dithered_image_view.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
 import 'segmentation_service.dart';
@@ -64,6 +66,8 @@ class _CapturePageState extends State<CapturePage> {
   bool _hasGps = false;
   bool _isFromGallery = false;
   int _processGeneration = 0;
+  ui.Image? _sourceUiImage;
+  Uint8List? _sourceImageBytes;
 
   // Flash and Zoom Controls
   FlashMode _flashMode = FlashMode.off;
@@ -284,12 +288,27 @@ class _CapturePageState extends State<CapturePage> {
       await _camera?.pausePreview();
     } catch (_) {}
 
+    ui.Image? sourceUiImage;
+    Uint8List? rawBytes;
+    try {
+      rawBytes = await file.readAsBytes();
+      final codec = await ui.instantiateImageCodec(rawBytes);
+      final frame = await codec.getNextFrame();
+      sourceUiImage = frame.image;
+    } catch (_) {}
+
+    if (!mounted || _processGeneration != gen) {
+      sourceUiImage?.dispose();
+      return;
+    }
+
+    _sourceUiImage?.dispose();
     setState(() {
       _busy = true;
       _takingPicture = false;
-      _status = _modelReady
-          ? 'Cutting the subject out…'
-          : 'Loading cutout model…';
+      _sourceUiImage = sourceUiImage;
+      _sourceImageBytes = rawBytes;
+      _status = null;
       _previewPng = null;
       _selectedTags.clear();
       _isFromGallery = isFromGallery;
@@ -304,7 +323,6 @@ class _CapturePageState extends State<CapturePage> {
       );
       if (!mounted || _processGeneration != gen) return;
 
-      setState(() => _status = 'Adding the vinyl backing…');
       final dieCut = await _processor.dieCut(cutout);
       if (!mounted || _processGeneration != gen) return;
 
@@ -322,13 +340,19 @@ class _CapturePageState extends State<CapturePage> {
         _busy = false;
         _status = null;
         _modelReady = true;
+        _sourceUiImage?.dispose();
+        _sourceUiImage = null;
+        _sourceImageBytes = null;
       });
     } on SegmentationException catch (error) {
       if (!mounted || _processGeneration != gen) return;
       try {
         await _camera?.resumePreview();
       } catch (_) {}
+      _sourceUiImage?.dispose();
       setState(() {
+        _sourceUiImage = null;
+        _sourceImageBytes = null;
         _busy = false;
         _status = null;
       });
@@ -338,7 +362,10 @@ class _CapturePageState extends State<CapturePage> {
       try {
         await _camera?.resumePreview();
       } catch (_) {}
+      _sourceUiImage?.dispose();
       setState(() {
+        _sourceUiImage = null;
+        _sourceImageBytes = null;
         _busy = false;
         _status = null;
       });
@@ -351,6 +378,7 @@ class _CapturePageState extends State<CapturePage> {
     try {
       _camera?.resumePreview();
     } catch (_) {}
+    _sourceUiImage?.dispose();
     setState(() {
       _busy = false;
       _takingPicture = false;
@@ -358,6 +386,8 @@ class _CapturePageState extends State<CapturePage> {
       _previewPng = null;
       _pendingMeta = null;
       _selectedTags.clear();
+      _sourceUiImage = null;
+      _sourceImageBytes = null;
     });
   }
 
@@ -435,6 +465,8 @@ class _CapturePageState extends State<CapturePage> {
 
   @override
   void dispose() {
+    _sourceUiImage?.dispose();
+    _sourceUiImage = null;
     _camera?.dispose();
     unawaited(_segmenter.dispose());
     super.dispose();
@@ -451,14 +483,14 @@ class _CapturePageState extends State<CapturePage> {
     return Scaffold(
       backgroundColor: scheme.surface,
       appBar: AppBar(
-        title: Text(preview != null ? 'Memory Preview' : 'Capture Memory'),
+        title: Text(preview != null ? 'Memory Preview' : (_busy ? 'Creating Sticker' : 'Capture Memory')),
         leading: IconButton(
           tooltip: 'Back',
           icon: const Icon(Icons.close_rounded),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         actions: [
-          if (preview == null) ...[
+          if (preview == null && !_busy) ...[
             if (_cameraReady && _camera != null)
               IconButton(
                 tooltip: isFlashOn ? 'Flash on' : 'Flash off',
@@ -489,41 +521,102 @@ class _CapturePageState extends State<CapturePage> {
       ),
       body: SafeArea(
         child: _busy
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: MdSpacing.xl),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const M3ELoadingIndicator(
-                        semanticsLabel: 'Cutting out subject',
+            ? Column(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: MdSpacing.sm,
+                        vertical: MdSpacing.xs,
                       ),
-                      const SizedBox(height: MdSpacing.lg),
-                      Text(
-                        _status ?? 'Cutting the subject out…',
-                        style: textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusXlIncreased,
+                          ),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: MdSpacing.xs),
-                      Text(
-                        'Isolating subject and creating vinyl border…',
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                        clipBehavior: Clip.antiAlias,
+                        child: Stack(
+                          children: [
+                            if (_sourceUiImage != null)
+                              Positioned.fill(
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(
+                                      MdSpacing.md,
+                                    ),
+                                    child: DitheredImageView(
+                                      image: _sourceUiImage!,
+                                      opacity: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else if (_sourceImageBytes != null)
+                              Positioned.fill(
+                                child: Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(
+                                      MdSpacing.md,
+                                    ),
+                                    child: Opacity(
+                                      opacity: 0.5,
+                                      child: Image.memory(
+                                        _sourceImageBytes!,
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(MdSpacing.md),
+                                decoration: BoxDecoration(
+                                  color: scheme.surface.withValues(alpha: 0.85),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const M3ELoadingIndicator(
+                                  semanticsLabel: 'Cutting out subject',
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: MdSpacing.lg),
-                      M3ETextButton(
-                        size: M3EButtonSize.sm,
-                        onPressed: _cancelCutout,
-                        child: const Text('Cancel'),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      MdSpacing.sm,
+                      MdSpacing.xs,
+                      MdSpacing.sm,
+                      MdSpacing.md,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: M3ETextButton(
+                            size: M3EButtonSize.sm,
+                            onPressed: _cancelCutout,
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               )
             : Column(
                 children: [
