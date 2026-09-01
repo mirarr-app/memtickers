@@ -155,71 +155,12 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
   }
 
   Future<void> _moveStickerBoard(BuildContext context, Sticker sticker) async {
-    final boards = widget.repository.boards;
-    if (boards.length <= 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Create another board first to move this sticker.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-
     final selectedBoardId = await showDialog<String>(
       context: context,
-      builder: (context) {
-        return SimpleDialog(
-          backgroundColor: scheme.surfaceContainerHigh,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
-          ),
-          title: Text(
-            'Move Sticker to Board',
-            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          children: [
-            for (final b in boards)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(context, b.id),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: MdSpacing.md,
-                  vertical: MdSpacing.xs,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      b.id == sticker.boardId
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      size: 20,
-                      color: b.id == sticker.boardId
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: MdSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        b.name,
-                        style: textTheme.bodyLarge?.copyWith(
-                          fontWeight: b.id == sticker.boardId
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          color: b.id == sticker.boardId
-                              ? scheme.primary
-                              : scheme.onSurface,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        );
-      },
+      builder: (context) => _MoveStickerBoardDialog(
+        sticker: sticker,
+        repository: widget.repository,
+      ),
     );
 
     if (selectedBoardId != null &&
@@ -227,7 +168,10 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
         context.mounted) {
       M3EHapticFeedback.medium.apply();
       await widget.repository.moveStickerToBoard(sticker.id, selectedBoardId);
-      final destName = boards.firstWhere((b) => b.id == selectedBoardId).name;
+      final destBoard = widget.repository.boards
+          .where((b) => b.id == selectedBoardId)
+          .firstOrNull;
+      final destName = destBoard?.name ?? 'selected board';
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -361,6 +305,13 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
               // Expressive Card List for Metadata
               M3ECardList(
                 itemCount: rows.length,
+                onTap: (index) {
+                  final onTap = rows[index].$4;
+                  if (onTap != null) {
+                    M3EHapticFeedback.light.apply();
+                    onTap();
+                  }
+                },
                 color: scheme.surfaceContainerLowest,
                 padding: const EdgeInsets.symmetric(
                   horizontal: MdSpacing.sm,
@@ -374,7 +325,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                   final row = rows[index];
                   final onTap = row.$4;
 
-                  Widget content = Padding(
+                  return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
@@ -416,29 +367,20 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                         if (onTap != null) ...[
                           const SizedBox(width: MdSpacing.xxs),
                           Icon(
-                            Icons.open_in_new_rounded,
-                            size: 16,
-                            color: scheme.onSurfaceVariant.withValues(
-                              alpha: 0.7,
-                            ),
+                            row.$1 == 'Board'
+                                ? Icons.swap_horiz_rounded
+                                : Icons.open_in_new_rounded,
+                            size: 18,
+                            color: row.$1 == 'Board'
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant.withValues(
+                                    alpha: 0.7,
+                                  ),
                           ),
                         ],
                       ],
                     ),
                   );
-
-                  if (onTap != null) {
-                    return InkWell(
-                      onTap: () {
-                        M3EHapticFeedback.light.apply();
-                        onTap();
-                      },
-                      borderRadius: BorderRadius.circular(MdSpacing.radiusXs),
-                      child: content,
-                    );
-                  }
-
-                  return content;
                 },
               ),
 
@@ -721,10 +663,17 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
               Row(
                 children: [
                   Expanded(
-                    child: M3ETextButton(
+                    child: M3EFilledButton.tonalIcon(
                       size: M3EButtonSize.sm,
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close'),
+                      onPressed: () {
+                        M3EHapticFeedback.light.apply();
+                        _moveStickerBoard(context, sticker);
+                      },
+                      icon: const Icon(
+                        Icons.drive_file_move_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('Move Board'),
                     ),
                   ),
                   const SizedBox(width: MdSpacing.xs),
@@ -822,5 +771,324 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
       await widget.repository.delete(sticker.id);
       if (context.mounted) Navigator.of(context).pop();
     }
+  }
+}
+
+class _MoveStickerBoardDialog extends StatefulWidget {
+  const _MoveStickerBoardDialog({
+    required this.sticker,
+    required this.repository,
+  });
+
+  final Sticker sticker;
+  final StickerRepository repository;
+
+  @override
+  State<_MoveStickerBoardDialog> createState() =>
+      _MoveStickerBoardDialogState();
+}
+
+class _MoveStickerBoardDialogState extends State<_MoveStickerBoardDialog> {
+  late final TextEditingController _newBoardController;
+  bool _isCreating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _newBoardController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _newBoardController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createAndSelectBoard() async {
+    final name = _newBoardController.text.trim();
+    if (name.isEmpty) return;
+
+    final existing = widget.repository.boards
+        .where((b) => b.name.toLowerCase() == name.toLowerCase())
+        .firstOrNull;
+    if (existing != null) {
+      Navigator.pop(context, existing.id);
+      return;
+    }
+
+    setState(() => _isCreating = true);
+    try {
+      final created = await widget.repository.createBoard(name);
+      if (mounted) {
+        Navigator.pop(context, created.id);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCreating = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return ListenableBuilder(
+      listenable: widget.repository,
+      builder: (context, _) {
+        final boards = widget.repository.boards;
+
+        return AlertDialog(
+          backgroundColor: scheme.surfaceContainerHigh,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
+          ),
+          icon: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.drive_file_move_rounded,
+              color: scheme.onPrimaryContainer,
+              size: 22,
+            ),
+          ),
+          title: Text(
+            'Move Sticker to Board',
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380, maxHeight: 420),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Select a destination board for this memory sticker.',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: MdSpacing.sm),
+
+                  // Inline new board creation
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+                      border: Border.all(
+                        color: scheme.outlineVariant.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _newBoardController,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: InputDecoration(
+                              hintText: 'New board name…',
+                              hintStyle: textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
+                              prefixIcon: Icon(
+                                Icons.add_to_photos_rounded,
+                                size: 18,
+                                color: scheme.primary,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: MdSpacing.xs,
+                                vertical: 8,
+                              ),
+                              isDense: true,
+                            ),
+                            onSubmitted: (_) => _createAndSelectBoard(),
+                          ),
+                        ),
+                        M3EFilledButton.icon(
+                          size: M3EButtonSize.xs,
+                          onPressed: _isCreating ? null : _createAndSelectBoard,
+                          icon: const Icon(Icons.add_rounded, size: 16),
+                          label: const Text('Add & Move'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: MdSpacing.sm),
+
+                  // Existing boards list
+                  for (final b in boards) ...[
+                    Builder(
+                      builder: (context) {
+                        final isCurrent = b.id == widget.sticker.boardId;
+                        final count = widget.repository
+                            .getStickerCountForBoard(b.id);
+
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: Ink(
+                              decoration: BoxDecoration(
+                                color: isCurrent
+                                    ? scheme.primaryContainer.withValues(
+                                        alpha: 0.4,
+                                      )
+                                    : scheme.surfaceContainerLowest,
+                                borderRadius: BorderRadius.circular(
+                                  MdSpacing.radiusMd,
+                                ),
+                                border: Border.all(
+                                  color: isCurrent
+                                      ? scheme.primary.withValues(alpha: 0.6)
+                                      : scheme.outlineVariant.withValues(
+                                          alpha: 0.25,
+                                        ),
+                                  width: isCurrent ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(
+                                  MdSpacing.radiusMd,
+                                ),
+                                onTap: isCurrent
+                                    ? null
+                                    : () => Navigator.pop(context, b.id),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: MdSpacing.sm,
+                                    vertical: MdSpacing.xs,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        isCurrent
+                                            ? Icons.check_circle_rounded
+                                            : (b.isNavigationMode
+                                                ? Icons.lock_outline_rounded
+                                                : Icons.dashboard_outlined),
+                                        size: 20,
+                                        color: isCurrent
+                                            ? scheme.primary
+                                            : scheme.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: MdSpacing.xs),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    b.name,
+                                                    style: textTheme.bodyLarge
+                                                        ?.copyWith(
+                                                          fontWeight: isCurrent
+                                                              ? FontWeight.w700
+                                                              : FontWeight.w500,
+                                                          color: isCurrent
+                                                              ? scheme.primary
+                                                              : scheme
+                                                                  .onSurface,
+                                                        ),
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (isCurrent) ...[
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 1.5,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: scheme.primary,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            MdSpacing
+                                                                .radiusFull,
+                                                          ),
+                                                    ),
+                                                    child: Text(
+                                                      'CURRENT',
+                                                      style: textTheme
+                                                          .labelSmall
+                                                          ?.copyWith(
+                                                            color: scheme
+                                                                .onPrimary,
+                                                            fontSize: 8.5,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            letterSpacing: 0.4,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                            Text(
+                                              count == 1
+                                                  ? '1 sticker'
+                                                  : '$count stickers',
+                                              style: textTheme.bodySmall
+                                                  ?.copyWith(
+                                                    color: scheme
+                                                        .onSurfaceVariant,
+                                                    fontSize: 11,
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (!isCurrent)
+                                        Icon(
+                                          Icons.arrow_forward_ios_rounded,
+                                          size: 14,
+                                          color: scheme.onSurfaceVariant
+                                              .withValues(alpha: 0.6),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.end,
+          actions: [
+            M3ETextButton(
+              size: M3EButtonSize.sm,
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }

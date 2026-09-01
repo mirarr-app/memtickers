@@ -5,6 +5,8 @@ import 'package:memtickers/data/sticker.dart';
 import 'package:memtickers/data/sticker_board.dart';
 import 'package:memtickers/data/sticker_repository.dart';
 
+import 'package:memtickers/details/sticker_details_sheet.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -139,6 +141,206 @@ void main() {
       );
       expect(find.text('New board name…'), findsOneWidget);
       expect(find.text('Add'), findsOneWidget);
+    });
+  });
+
+  group('Move Sticker to Board Tests', () {
+    test('moveStickerToBoard updates sticker boardId and repo state', () async {
+      final repo = StickerRepository();
+      final sticker = Sticker(
+        id: 's-move-1',
+        boardId: 'b-source',
+        imagePath: '/path/1.png',
+        createdAt: DateTime(2026, 1, 1),
+        x: 50,
+        y: 50,
+        rotation: 0,
+        scale: 1,
+        zIndex: 0,
+      );
+      final board1 = StickerBoard(
+        id: 'b-source',
+        name: 'Source Board',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final board2 = StickerBoard(
+        id: 'b-dest',
+        name: 'Destination Board',
+        createdAt: DateTime(2026, 1, 2),
+      );
+
+      repo.populateForTesting(
+        stickers: [sticker],
+        boards: [board1, board2],
+        activeBoardId: 'b-source',
+      );
+
+      expect(repo.stickers.length, 1);
+      expect(repo.stickers.first.boardId, 'b-source');
+
+      await repo.moveStickerToBoard('s-move-1', 'b-dest');
+
+      expect(repo.allStickers.first.boardId, 'b-dest');
+      // On b-source, stickers list is now empty
+      expect(repo.stickers, isEmpty);
+    });
+
+    testWidgets('Move sticker to another board from detail sheet', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final sticker = Sticker(
+        id: 's-detail-1',
+        boardId: 'b-1',
+        imagePath: '/path/1.png',
+        createdAt: DateTime(2026, 1, 1),
+        modelTags: const ['sample'],
+        x: 50,
+        y: 50,
+        rotation: 0,
+        scale: 1,
+        zIndex: 0,
+      );
+      final board1 = StickerBoard(
+        id: 'b-1',
+        name: 'First Board',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final board2 = StickerBoard(
+        id: 'b-2',
+        name: 'Second Board',
+        createdAt: DateTime(2026, 1, 2),
+      );
+
+      repo.populateForTesting(
+        stickers: [sticker],
+        boards: [board1, board2],
+        activeBoardId: 'b-1',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () => showStickerDetails(
+                    context: context,
+                    sticker: sticker,
+                    repository: repo,
+                  ),
+                  child: const Text('Open Details'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Details'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Memory Details'), findsOneWidget);
+      expect(find.text('First Board'), findsOneWidget);
+      expect(find.text('Move Board'), findsOneWidget);
+
+      // Tap Move Board button
+      await tester.tap(find.text('Move Board'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Move Sticker to Board'), findsOneWidget);
+      expect(find.text('Second Board'), findsOneWidget);
+
+      // Select Second Board
+      await tester.tap(find.text('Second Board'));
+      await tester.pumpAndSettle();
+
+      expect(repo.allStickers.first.boardId, 'b-2');
+    });
+
+    testWidgets('Create new board and move sticker to it from detail sheet', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final sticker = Sticker(
+        id: 's-detail-2',
+        boardId: 'b-1',
+        imagePath: '/path/2.png',
+        createdAt: DateTime(2026, 1, 1),
+        modelTags: const ['sample'],
+        x: 50,
+        y: 50,
+        rotation: 0,
+        scale: 1,
+        zIndex: 0,
+      );
+      final board1 = StickerBoard(
+        id: 'b-1',
+        name: 'First Board',
+        createdAt: DateTime(2026, 1, 1),
+      );
+
+      repo.populateForTesting(
+        stickers: [sticker],
+        boards: [board1],
+        activeBoardId: 'b-1',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () => showStickerDetails(
+                    context: context,
+                    sticker: sticker,
+                    repository: repo,
+                  ),
+                  child: const Text('Open Details'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Details'));
+      await tester.pumpAndSettle();
+
+      // Tap 'Board' row in metadata list
+      await tester.tap(find.text('First Board'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Move Sticker to Board'), findsOneWidget);
+      expect(find.text('New board name…'), findsOneWidget);
+
+      // Type new board name
+      await tester.enterText(
+        find.widgetWithText(TextField, 'New board name…'),
+        'Vacation 2026',
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Add & Move button
+      await tester.tap(find.text('Add & Move'));
+      await tester.pumpAndSettle();
+
+      expect(repo.boards.any((b) => b.name == 'Vacation 2026'), isTrue);
+      final newBoard = repo.boards.firstWhere((b) => b.name == 'Vacation 2026');
+      expect(repo.allStickers.first.boardId, newBoard.id);
     });
   });
 }

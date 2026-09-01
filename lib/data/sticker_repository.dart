@@ -21,6 +21,8 @@ class StickerRepository extends ChangeNotifier {
   StickerSettings _settings = const StickerSettings();
   Directory? _imagesDir;
 
+  bool _isTestMode = false;
+
   List<Sticker> get stickers =>
       List.unmodifiable(_stickers.where((s) => s.boardId == _activeBoardId));
   List<Sticker> get allStickers => List.unmodifiable(_stickers);
@@ -153,11 +155,15 @@ class StickerRepository extends ChangeNotifier {
     if (_activeBoardId == boardId) return;
     if (!_boards.any((b) => b.id == boardId)) return;
     _activeBoardId = boardId;
-    final db = await StickerDatabase.instance();
-    await db.insert('settings', {
-      'key': 'activeBoardId',
-      'value': boardId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.insert('settings', {
+          'key': 'activeBoardId',
+          'value': boardId,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      } catch (_) {}
+    }
     notifyListeners();
   }
 
@@ -166,24 +172,29 @@ class StickerRepository extends ChangeNotifier {
     if (trimmed.isEmpty) {
       throw ArgumentError('Board name cannot be empty');
     }
-    final db = await StickerDatabase.instance();
     final newBoard = StickerBoard(
       id: const Uuid().v4(),
       name: trimmed,
       createdAt: DateTime.now(),
     );
-    await db.insert(
-      'boards',
-      newBoard.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
     _boards.add(newBoard);
     _activeBoardId = newBoard.id;
-    await db.insert('settings', {
-      'key': 'activeBoardId',
-      'value': newBoard.id,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
     notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.insert(
+          'boards',
+          newBoard.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await db.insert('settings', {
+          'key': 'activeBoardId',
+          'value': newBoard.id,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      } catch (_) {}
+    }
     return newBoard;
   }
 
@@ -195,16 +206,20 @@ class StickerRepository extends ChangeNotifier {
     final index = _boards.indexWhere((b) => b.id == id);
     if (index == -1) return;
 
-    final db = await StickerDatabase.instance();
-    await db.update(
-      'boards',
-      {'name': trimmed},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
     _boards[index] = _boards[index].copyWith(name: trimmed);
     notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.update(
+          'boards',
+          {'name': trimmed},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> setBoardNavigationMode(String id, bool isNavigationMode) async {
@@ -212,16 +227,20 @@ class StickerRepository extends ChangeNotifier {
     if (index == -1) return;
     if (_boards[index].isNavigationMode == isNavigationMode) return;
 
-    final db = await StickerDatabase.instance();
-    await db.update(
-      'boards',
-      {'isNavigationMode': isNavigationMode ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
     _boards[index] = _boards[index].copyWith(isNavigationMode: isNavigationMode);
     notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.update(
+          'boards',
+          {'isNavigationMode': isNavigationMode ? 1 : 0},
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      } catch (_) {}
+    }
   }
 
   Future<void> toggleBoardNavigationMode(String id) async {
@@ -237,38 +256,39 @@ class StickerRepository extends ChangeNotifier {
     final board = _boards.where((b) => b.id == id).firstOrNull;
     if (board == null) return;
 
-    final db = await StickerDatabase.instance();
-
-    // Delete all stickers belonging to this board
-    final boardStickers = _stickers.where((s) => s.boardId == id).toList();
-    for (final sticker in boardStickers) {
-      await db.delete('stickers', where: 'id = ?', whereArgs: [sticker.id]);
-      await db.delete(
-        'sticker_tags',
-        where: 'stickerId = ?',
-        whereArgs: [sticker.id],
-      );
-      final file = File(sticker.imagePath);
-      if (await file.exists()) {
-        try {
-          await file.delete();
-        } catch (_) {}
-      }
-    }
     _stickers.removeWhere((s) => s.boardId == id);
-
-    await db.delete('boards', where: 'id = ?', whereArgs: [id]);
     _boards.removeWhere((b) => b.id == id);
 
     if (_activeBoardId == id) {
       _activeBoardId = _boards.first.id;
-      await db.insert('settings', {
-        'key': 'activeBoardId',
-        'value': _activeBoardId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
-
     notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        final boardStickers = _stickers.where((s) => s.boardId == id).toList();
+        for (final sticker in boardStickers) {
+          await db.delete('stickers', where: 'id = ?', whereArgs: [sticker.id]);
+          await db.delete(
+            'sticker_tags',
+            where: 'stickerId = ?',
+            whereArgs: [sticker.id],
+          );
+          final file = File(sticker.imagePath);
+          if (await file.exists()) {
+            try {
+              await file.delete();
+            } catch (_) {}
+          }
+        }
+        await db.delete('boards', where: 'id = ?', whereArgs: [id]);
+        await db.insert('settings', {
+          'key': 'activeBoardId',
+          'value': _activeBoardId,
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      } catch (_) {}
+    }
   }
 
   Future<void> moveStickerToBoard(
@@ -283,15 +303,48 @@ class StickerRepository extends ChangeNotifier {
     if (sticker.boardId == targetBoardId) return;
 
     final updated = sticker.copyWith(boardId: targetBoardId);
-    final db = await StickerDatabase.instance();
-    await db.update(
-      'stickers',
-      {'boardId': targetBoardId},
-      where: 'id = ?',
-      whereArgs: [stickerId],
-    );
-
     _stickers[index] = updated;
+    notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.update(
+          'stickers',
+          {'boardId': targetBoardId},
+          where: 'id = ?',
+          whereArgs: [stickerId],
+        );
+      } catch (_) {}
+    }
+  }
+
+  @visibleForTesting
+  void populateForTesting({
+    List<Sticker>? stickers,
+    List<StickerBoard>? boards,
+    List<StickerTag>? tags,
+    String? activeBoardId,
+  }) {
+    _isTestMode = true;
+    if (stickers != null) {
+      _stickers
+        ..clear()
+        ..addAll(stickers);
+    }
+    if (boards != null) {
+      _boards
+        ..clear()
+        ..addAll(boards);
+    }
+    if (tags != null) {
+      _tags
+        ..clear()
+        ..addAll(tags);
+    }
+    if (activeBoardId != null) {
+      _activeBoardId = activeBoardId;
+    }
     notifyListeners();
   }
 
