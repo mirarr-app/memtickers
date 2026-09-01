@@ -19,7 +19,6 @@ import 'auto_tag_service.dart';
 import 'dithered_image_view.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
-import 'portrait_morph_view.dart';
 import 'segmentation_service.dart';
 import 'sticker_processor.dart';
 
@@ -69,7 +68,6 @@ class _CapturePageState extends State<CapturePage> {
   int _processGeneration = 0;
   ui.Image? _sourceUiImage;
   Uint8List? _sourceImageBytes;
-  bool _isMorphing = false;
 
   // Flash and Zoom Controls
   FlashMode _flashMode = FlashMode.off;
@@ -340,7 +338,6 @@ class _CapturePageState extends State<CapturePage> {
         _previewPng = finalPng;
         _pendingMeta = meta;
         _busy = false;
-        _isMorphing = true;
         _status = null;
         _modelReady = true;
         _sourceUiImage?.dispose();
@@ -355,7 +352,6 @@ class _CapturePageState extends State<CapturePage> {
       setState(() {
         _sourceUiImage = null;
         _sourceImageBytes = null;
-        _isMorphing = false;
         _busy = false;
         _status = null;
       });
@@ -369,7 +365,6 @@ class _CapturePageState extends State<CapturePage> {
       setState(() {
         _sourceUiImage = null;
         _sourceImageBytes = null;
-        _isMorphing = false;
         _busy = false;
         _status = null;
       });
@@ -385,7 +380,6 @@ class _CapturePageState extends State<CapturePage> {
     _sourceUiImage?.dispose();
     setState(() {
       _busy = false;
-      _isMorphing = false;
       _takingPicture = false;
       _status = null;
       _previewPng = null;
@@ -458,7 +452,6 @@ class _CapturePageState extends State<CapturePage> {
       _pendingMeta = null;
       _selectedTags.clear();
       _sourceImageBytes = null;
-      _isMorphing = false;
     });
     if (wasFromGallery) {
       await _pickGallery();
@@ -653,25 +646,12 @@ class _CapturePageState extends State<CapturePage> {
                                         padding: const EdgeInsets.all(
                                           MdSpacing.md,
                                         ),
-                                        child: _sourceImageBytes != null
-                                            ? PortraitMorphView(
-                                                imageABytes: _sourceImageBytes!,
-                                                imageBBytes: preview,
-                                                autoAnimate: _isMorphing,
-                                                onCompleted: () {
-                                                  if (mounted) {
-                                                    setState(() {
-                                                      _isMorphing = false;
-                                                    });
-                                                  }
-                                                },
-                                              )
-                                            : Image.memory(
-                                                preview,
-                                                fit: BoxFit.contain,
-                                                filterQuality:
-                                                    FilterQuality.high,
-                                              ),
+                                        child: Image.memory(
+                                          preview,
+                                          fit: BoxFit.contain,
+                                          filterQuality:
+                                              FilterQuality.high,
+                                        ),
                                       ),
                                     ),
                                   ),

@@ -792,14 +792,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.8"
-  portrait_morph:
-    dependency: "direct main"
-    description:
-      name: portrait_morph
-      sha256: "1d7cbea6ca6b9158a28ac0c884f75451d9d522e443ad3c348ea589b203e8aa7e"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.0"
   posix:
     dependency: transitive
     description:
