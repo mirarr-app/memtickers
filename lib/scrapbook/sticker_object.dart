@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -30,31 +29,33 @@ class StickerObject extends StatefulWidget {
 
 class _StickerObjectState extends State<StickerObject>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _drop;
+  late final AnimationController _stickController;
   StreamSubscription<AccelerometerEvent>? _tilt;
   double _tiltX = 0;
   double _tiltY = 0;
+  bool _impactHapticFired = false;
 
   @override
   void initState() {
     super.initState();
-    _drop = AnimationController.unbounded(vsync: this, value: 1);
+    _stickController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 850),
+    );
+
+    _stickController.addListener(() {
+      if (_stickController.value >= 0.50 && !_impactHapticFired) {
+        _impactHapticFired = true;
+        M3EHapticFeedback.medium.apply();
+      }
+    });
+
     if (widget.dropping) {
-      _drop.value = 1.28;
-      _drop.animateWith(
-        SpringSimulation(
-          SpringDescription.withDampingRatio(
-            mass: 1,
-            stiffness: 180,
-            ratio: 0.55,
-          ),
-          1.28,
-          1,
-          0,
-        ),
-      );
-      M3EHapticFeedback.heavy.apply();
+      _startSticking();
+    } else {
+      _stickController.value = 1.0;
     }
+
     _tilt = accelerometerEventStream().listen((event) {
       if (!mounted) return;
       setState(() {
@@ -65,64 +66,261 @@ class _StickerObjectState extends State<StickerObject>
   }
 
   @override
+  void didUpdateWidget(covariant StickerObject oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.dropping && widget.dropping) {
+      _startSticking();
+    }
+  }
+
+  void _startSticking() {
+    _impactHapticFired = false;
+    M3EHapticFeedback.light.apply();
+    _stickController.forward(from: 0.0);
+  }
+
+  @override
   void dispose() {
     _tilt?.cancel();
-    _drop.dispose();
+    _stickController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final file = File(widget.sticker.imagePath);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return AnimatedBuilder(
-      animation: _drop,
+      animation: _stickController,
       builder: (context, child) {
-        final scale = _drop.value;
+        final t = _stickController.value;
+        final isAnimating = _stickController.isAnimating || t < 1.0;
+
+        // 1. Scale & Squash-and-Stretch calculation
+        double scaleX = 1.0;
+        double scaleY = 1.0;
+        if (isAnimating) {
+          if (t <= 0.50) {
+            // Swooping down and accelerating from lifted floating scale to board
+            final p = Curves.easeInCubic.transform(t / 0.50);
+            final s = 1.34 - (1.34 - 0.94) * p;
+            scaleX = s;
+            scaleY = s;
+          } else if (t <= 0.72) {
+            // Impact squash & spring rebound
+            final p = Curves.easeOutBack.transform((t - 0.50) / 0.22);
+            scaleX = 0.94 + (1.05 - 0.94) * p;
+            scaleY = 0.94 + (1.03 - 0.94) * p;
+          } else if (t <= 0.88) {
+            // Secondary rebound
+            final p = Curves.easeInOut.transform((t - 0.72) / 0.16);
+            scaleX = 1.05 - (1.05 - 0.99) * p;
+            scaleY = 1.03 - (1.03 - 0.99) * p;
+          } else {
+            // Settle to resting scale
+            final p = Curves.easeOut.transform((t - 0.88) / 0.12);
+            scaleX = 0.99 + (1.0 - 0.99) * p;
+            scaleY = 0.99 + (1.0 - 0.99) * p;
+          }
+        }
+
+        // 2. 3D Peel Roll / Angle calculation
+        double rotX = _tiltX;
+        double rotY = _tiltY;
+        double rotZ = 0.0;
+        if (isAnimating && t < 0.54) {
+          final p = Curves.easeInQuad.transform((t / 0.54).clamp(0.0, 1.0));
+          final lift = 1.0 - p;
+          rotX = lift * 0.38 + _tiltX;
+          rotY = lift * -0.28 + _tiltY;
+          rotZ = lift * 0.08;
+        }
+
+        // 3. Dynamic Shadow Transition
+        Offset shadowOffset = const Offset(3, 5);
+        double shadowScale = 1.0;
+        double shadowAlpha = 0.32;
+        if (isAnimating && t < 0.50) {
+          final p = Curves.easeInCubic.transform(t / 0.50);
+          shadowOffset = Offset.lerp(const Offset(16, 28), const Offset(3, 5), p)!;
+          shadowScale = 1.22 - 0.22 * p;
+          shadowAlpha = 0.16 + 0.16 * p;
+        }
+
+        // 4. Gloss Sheen Sweep (Active between 0.44 and 0.94)
+        double sheenProgress = -1.0;
+        if (isAnimating && t >= 0.44 && t <= 0.94) {
+          sheenProgress = (t - 0.44) / 0.50;
+        }
+
+        // 5. Adhesive Impact Shockwave Burst (Active between 0.50 and 1.0)
+        double impactProgress = -1.0;
+        if (isAnimating && t >= 0.50) {
+          impactProgress = (t - 0.50) / 0.50;
+        }
+
+        Widget imageWidget = _StickerImage(file: file, width: 168);
+        if (sheenProgress >= 0.0) {
+          imageWidget = ShaderMask(
+            shaderCallback: (bounds) {
+              final sweepPos = -2.5 + sheenProgress * 5.0;
+              return LinearGradient(
+                begin: Alignment(sweepPos - 0.7, sweepPos - 0.7),
+                end: Alignment(sweepPos + 0.7, sweepPos + 0.7),
+                colors: [
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.25),
+                  Colors.white.withValues(alpha: 0.85),
+                  Colors.white.withValues(alpha: 0.25),
+                  Colors.white.withValues(alpha: 0.0),
+                ],
+                stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+              ).createShader(bounds);
+            },
+            blendMode: BlendMode.srcATop,
+            child: imageWidget,
+          );
+        }
+
         return Transform(
           alignment: Alignment.center,
           transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.0016)
-            ..rotateX(_tiltX)
-            ..rotateY(_tiltY),
-          child: Transform.scale(scale: scale, child: child),
+            ..setEntry(3, 2, 0.0018)
+            ..rotateX(rotX)
+            ..rotateY(rotY)
+            ..rotateZ(rotZ),
+          child: Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()..scaleByDouble(scaleX, scaleY, 1.0, 1.0),
+            child: GestureDetector(
+              onTap: () {
+                M3EHapticFeedback.light.apply();
+                widget.onTap();
+              },
+              onLongPress: widget.onLongPress,
+              child: Semantics(
+                button: true,
+                label: 'Memory sticker',
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    // Adhesive impact ring & sparkle particles
+                    if (impactProgress >= 0.0)
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _AdhesiveImpactPainter(
+                            progress: impactProgress,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ),
+                    // Dynamic Cast Shadow
+                    Transform.translate(
+                      offset: shadowOffset,
+                      child: Transform.scale(
+                        scale: shadowScale,
+                        child: _StickerImage(
+                          file: file,
+                          width: 168,
+                          filterQuality: FilterQuality.medium,
+                          color: scheme.shadow.withValues(alpha: shadowAlpha),
+                        ),
+                      ),
+                    ),
+                    // Die-Cut White Vinyl Backing Border
+                    Transform.translate(
+                      offset: const Offset(1.4, 1.8),
+                      child: _StickerImage(
+                        file: file,
+                        width: 168,
+                        color: scheme.surfaceContainerLowest,
+                      ),
+                    ),
+                    // Main Sticker with Gloss Sheen
+                    imageWidget,
+                    // Selected active outline indicator
+                    if (widget.selected)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: scheme.primary.withValues(alpha: 0.8),
+                                width: 2.0,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         );
       },
-      child: GestureDetector(
-        onTap: () {
-          M3EHapticFeedback.light.apply();
-          widget.onTap();
-        },
-        onLongPress: widget.onLongPress,
-        child: Semantics(
-          button: true,
-          label: 'Memory sticker',
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Transform.translate(
-                offset: const Offset(3, 5),
-                child: _StickerImage(
-                  file: file,
-                  width: 168,
-                  filterQuality: FilterQuality.medium,
-                  color: Theme.of(context).colorScheme.shadow.withValues(alpha: 0.32),
-                ),
-              ),
-              Transform.translate(
-                offset: const Offset(1.4, 1.8),
-                child: _StickerImage(
-                  file: file,
-                  width: 168,
-                  color: Theme.of(context).colorScheme.surfaceContainerLowest,
-                ),
-              ),
-              _StickerImage(file: file, width: 168),
-            ],
-          ),
-        ),
-      ),
     );
+  }
+}
+
+class _AdhesiveImpactPainter extends CustomPainter {
+  const _AdhesiveImpactPainter({
+    required this.progress,
+    required this.color,
+  });
+
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0 || progress >= 1.0) return;
+
+    final eased = Curves.easeOutCubic.transform(progress);
+    final alpha = ((1.0 - progress) * 0.45).clamp(0.0, 1.0);
+    final paint = Paint()
+      ..color = color.withValues(alpha: alpha)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (2.8 * (1.0 - progress)).clamp(0.5, 2.8);
+
+    final expansion = 6.0 + 24.0 * eased;
+    final rect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: size.width + expansion * 2,
+      height: size.height + expansion * 2,
+    );
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(20.0 + expansion * 0.4),
+    );
+    canvas.drawRRect(rrect, paint);
+
+    // Corner sparkle bursts
+    final dotPaint = Paint()
+      ..color = color.withValues(alpha: alpha * 1.3)
+      ..style = PaintingStyle.fill;
+    final dotDist = expansion * 1.15;
+    final dotSize = (3.2 * (1.0 - eased)).clamp(0.5, 3.2);
+
+    final corners = [
+      rect.topLeft + Offset(-dotDist * 0.18, -dotDist * 0.18),
+      rect.topRight + Offset(dotDist * 0.18, -dotDist * 0.18),
+      rect.bottomLeft + Offset(-dotDist * 0.18, dotDist * 0.18),
+      rect.bottomRight + Offset(dotDist * 0.18, dotDist * 0.18),
+    ];
+
+    for (final c in corners) {
+      canvas.drawCircle(c, dotSize, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AdhesiveImpactPainter oldDelegate) {
+    return oldDelegate.progress != progress || oldDelegate.color != color;
   }
 }
 
