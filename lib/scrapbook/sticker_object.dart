@@ -272,21 +272,6 @@ class _StickerObjectState extends State<StickerObject>
                     ),
                     // Main Sticker with Gloss Sheen
                     imageWidget,
-                    // Selected active outline indicator
-                    if (widget.selected)
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: scheme.primary.withValues(alpha: 0.8),
-                                width: 2.0,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
