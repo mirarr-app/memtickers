@@ -28,6 +28,7 @@ dependencies:
   url_launcher: ^6.3.2
   thanos_snap_effect: ^0.0.9
   paper_shaders: ^0.0.3
+  portrait_morph: ^1.0.0
 
 dev_dependencies:
   flutter_test:
