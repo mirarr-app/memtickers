@@ -460,37 +460,30 @@ class _CapturePageState extends State<CapturePage> {
         actions: [
           if (preview == null) ...[
             if (_cameraReady && _camera != null)
-              Padding(
-                padding: const EdgeInsets.only(right: MdSpacing.xxs),
-                child: ActionChip(
-                  avatar: Icon(
-                    isFlashOn
-                        ? Icons.flash_on_rounded
-                        : Icons.flash_off_rounded,
-                    size: 16,
-                    color: isFlashOn ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                  label: Text(isFlashOn ? 'Flash on' : 'Flash off'),
-                  onPressed: _toggleFlash,
+              IconButton(
+                tooltip: isFlashOn ? 'Flash on' : 'Flash off',
+                icon: Icon(
+                  isFlashOn
+                      ? Icons.flash_on_rounded
+                      : Icons.flash_off_rounded,
+                  color: isFlashOn ? scheme.primary : scheme.onSurfaceVariant,
                 ),
+                onPressed: _toggleFlash,
               ),
-            Padding(
-              padding: const EdgeInsets.only(right: MdSpacing.xs),
-              child: ActionChip(
-                avatar: Icon(
-                  _hasGps
-                      ? Icons.location_on_rounded
-                      : Icons.location_off_rounded,
-                  size: 16,
-                  color: _hasGps ? scheme.primary : scheme.onSurfaceVariant,
-                ),
-                label: Text(_hasGps ? 'GPS on' : 'GPS off'),
-                onPressed: () {
-                  M3EHapticFeedback.light.apply();
-                  _ensureLocationOptional();
-                },
+            IconButton(
+              tooltip: _hasGps ? 'GPS on' : 'GPS off',
+              icon: Icon(
+                _hasGps
+                    ? Icons.location_on_rounded
+                    : Icons.location_off_rounded,
+                color: _hasGps ? scheme.primary : scheme.onSurfaceVariant,
               ),
+              onPressed: () {
+                M3EHapticFeedback.light.apply();
+                _ensureLocationOptional();
+              },
             ),
+            const SizedBox(width: MdSpacing.xs),
           ],
         ],
       ),
