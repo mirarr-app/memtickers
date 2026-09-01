@@ -15,7 +15,7 @@ class DitheredImageView extends StatefulWidget {
       colorBack: '#5452ff',
       colorHighlight: '#eeeeee',
       type: ImageDitheringType.bayer2x2,
-      size: 3,
+      size: 7,
       originalColors: true,
       colorSteps: 1,
     ),
