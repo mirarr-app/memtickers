@@ -305,21 +305,27 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
               // Header with Sticker Thumbnail & Title
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerLowest,
-                      borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
-                      border: Border.all(
-                        color: scheme.outlineVariant.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    padding: const EdgeInsets.all(4),
+                  SizedBox(
+                    width: 52,
+                    height: 52,
                     child: File(sticker.imagePath).existsSync()
-                        ? Image.file(
-                            File(sticker.imagePath),
-                            fit: BoxFit.contain,
+                        ? Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Transform.translate(
+                                offset: const Offset(1.5, 2.5),
+                                child: Image.file(
+                                  File(sticker.imagePath),
+                                  fit: BoxFit.contain,
+                                  color: scheme.shadow.withValues(alpha: 0.28),
+                                  colorBlendMode: BlendMode.srcIn,
+                                ),
+                              ),
+                              Image.file(
+                                File(sticker.imagePath),
+                                fit: BoxFit.contain,
+                              ),
+                            ],
                           )
                         : Icon(Icons.auto_awesome, color: scheme.primary),
                   ),
