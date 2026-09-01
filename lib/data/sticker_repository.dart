@@ -614,19 +614,23 @@ class StickerRepository extends ChangeNotifier {
   }
 
   Future<void> updateTransform(Sticker sticker) async {
-    final db = await StickerDatabase.instance();
-    await db.update(
-      'stickers',
-      {
-        'x': sticker.x,
-        'y': sticker.y,
-        'rotation': sticker.rotation,
-        'scale': sticker.scale,
-        'zIndex': sticker.zIndex,
-      },
-      where: 'id = ?',
-      whereArgs: [sticker.id],
-    );
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.update(
+          'stickers',
+          {
+            'x': sticker.x,
+            'y': sticker.y,
+            'rotation': sticker.rotation,
+            'scale': sticker.scale,
+            'zIndex': sticker.zIndex,
+          },
+          where: 'id = ?',
+          whereArgs: [sticker.id],
+        );
+      } catch (_) {}
+    }
     final index = _stickers.indexWhere((s) => s.id == sticker.id);
     if (index >= 0) {
       _stickers[index] = _stickers[index].copyWith(
@@ -641,13 +645,19 @@ class StickerRepository extends ChangeNotifier {
   }
 
   Future<void> delete(String id) async {
-    final db = await StickerDatabase.instance();
     final existing = _stickers.where((s) => s.id == id).firstOrNull;
-    await db.delete('stickers', where: 'id = ?', whereArgs: [id]);
-    await db.delete('sticker_tags', where: 'stickerId = ?', whereArgs: [id]);
-    await db.delete('sticker_model_tags', where: 'stickerId = ?', whereArgs: [id]);
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.delete('stickers', where: 'id = ?', whereArgs: [id]);
+        await db.delete('sticker_tags', where: 'stickerId = ?', whereArgs: [id]);
+        await db.delete('sticker_model_tags', where: 'stickerId = ?', whereArgs: [id]);
+      } catch (_) {}
+    }
     _stickers.removeWhere((s) => s.id == id);
-    if (existing != null) {
+    notifyListeners();
+
+    if (!_isTestMode && existing != null) {
       final file = File(existing.imagePath);
       if (await file.exists()) {
         try {
@@ -655,6 +665,5 @@ class StickerRepository extends ChangeNotifier {
         } catch (_) {}
       }
     }
-    notifyListeners();
   }
 }

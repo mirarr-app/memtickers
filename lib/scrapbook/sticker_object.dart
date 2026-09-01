@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:thanos_snap_effect/thanos_snap_effect.dart';
 
 import '../data/sticker.dart';
 
@@ -13,6 +14,7 @@ class StickerObject extends StatefulWidget {
     required this.sticker,
     required this.selected,
     required this.dropping,
+    this.snapping = false,
     required this.onTap,
     required this.onLongPress,
   });
@@ -20,6 +22,7 @@ class StickerObject extends StatefulWidget {
   final Sticker sticker;
   final bool selected;
   final bool dropping;
+  final bool snapping;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -28,8 +31,9 @@ class StickerObject extends StatefulWidget {
 }
 
 class _StickerObjectState extends State<StickerObject>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _stickController;
+  late final AnimationController _snapController;
   StreamSubscription<AccelerometerEvent>? _tilt;
   double _tiltX = 0;
   double _tiltY = 0;
@@ -43,6 +47,11 @@ class _StickerObjectState extends State<StickerObject>
       duration: const Duration(milliseconds: 850),
     );
 
+    _snapController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+
     _stickController.addListener(() {
       if (_stickController.value >= 0.50 && !_impactHapticFired) {
         _impactHapticFired = true;
@@ -54,6 +63,14 @@ class _StickerObjectState extends State<StickerObject>
       _startSticking();
     } else {
       _stickController.value = 1.0;
+    }
+
+    if (widget.snapping) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.snapping) {
+          _snapController.forward(from: 0.0);
+        }
+      });
     }
 
     _tilt = accelerometerEventStream().listen((event) {
@@ -71,6 +88,9 @@ class _StickerObjectState extends State<StickerObject>
     if (!oldWidget.dropping && widget.dropping) {
       _startSticking();
     }
+    if (!oldWidget.snapping && widget.snapping) {
+      _snapController.forward(from: 0.0);
+    }
   }
 
   void _startSticking() {
@@ -83,6 +103,7 @@ class _StickerObjectState extends State<StickerObject>
   void dispose() {
     _tilt?.cancel();
     _stickController.dispose();
+    _snapController.dispose();
     super.dispose();
   }
 
@@ -92,11 +113,27 @@ class _StickerObjectState extends State<StickerObject>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return AnimatedBuilder(
-      animation: _stickController,
-      builder: (context, child) {
-        final t = _stickController.value;
-        final isAnimating = _stickController.isAnimating || t < 1.0;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        M3EHapticFeedback.light.apply();
+        widget.onTap();
+      },
+      onLongPress: widget.onLongPress,
+      child: Snappable(
+        animation: _snapController,
+        outerPadding: EdgeInsets.zero,
+        style: const SnappableStyle(
+          particleLifetime: 0.65,
+          fadeOutDuration: 0.35,
+          particleSpeed: 1.1,
+          particleSize: SnappableParticleSize.squareFromRelativeWidth(0.015),
+        ),
+        child: AnimatedBuilder(
+          animation: _stickController,
+          builder: (context, child) {
+            final t = _stickController.value;
+            final isAnimating = _stickController.isAnimating || t < 1.0;
 
         // 1. Scale & Squash-and-Stretch calculation
         double scaleX = 1.0;
@@ -189,17 +226,11 @@ class _StickerObjectState extends State<StickerObject>
           transform: Matrix4.identity()
             ..setEntry(3, 2, 0.0018)
             ..rotateX(rotX)
-            ..rotateY(rotY)
-            ..rotateZ(rotZ),
-          child: Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()..scaleByDouble(scaleX, scaleY, 1.0, 1.0),
-            child: GestureDetector(
-              onTap: () {
-                M3EHapticFeedback.light.apply();
-                widget.onTap();
-              },
-              onLongPress: widget.onLongPress,
+              ..rotateY(rotY)
+              ..rotateZ(rotZ),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()..scaleByDouble(scaleX, scaleY, 1.0, 1.0),
               child: Semantics(
                 button: true,
                 label: 'Memory sticker',
@@ -260,11 +291,12 @@ class _StickerObjectState extends State<StickerObject>
                 ),
               ),
             ),
-          ),
-        );
-      },
-    );
-  }
+          );
+        },
+      ),
+    ),
+  );
+}
 }
 
 class _AdhesiveImpactPainter extends CustomPainter {
@@ -342,6 +374,8 @@ class _StickerImage extends StatelessWidget {
     return Image.file(
       file,
       width: width,
+      height: width,
+      fit: BoxFit.contain,
       filterQuality: filterQuality,
       color: color,
       colorBlendMode: color == null ? null : BlendMode.srcIn,

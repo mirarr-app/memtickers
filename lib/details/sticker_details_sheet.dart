@@ -10,14 +10,14 @@ import '../data/sticker_repository.dart';
 import '../tags/tag_selection_sheet.dart';
 import '../theme/spacing.dart';
 
-Future<void> showStickerDetails({
+Future<bool?> showStickerDetails({
   required BuildContext context,
   required Sticker sticker,
   required StickerRepository repository,
 }) {
   final width = MediaQuery.sizeOf(context).width;
   if (width >= 840) {
-    return showGeneralDialog<void>(
+    return showGeneralDialog<bool>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss sticker details',
@@ -44,7 +44,7 @@ Future<void> showStickerDetails({
     );
   }
 
-  return showModalBottomSheet<void>(
+  return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -690,7 +690,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                       ),
                       onPressed: () {
                         M3EHapticFeedback.medium.apply();
-                        _confirmDelete(context, sticker);
+                        _confirmDelete(sticker);
                       },
                       icon: const Icon(Icons.delete_outline_rounded, size: 18),
                       label: const Text('Delete'),
@@ -705,13 +705,13 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, Sticker sticker) async {
+  Future<void> _confirmDelete(Sticker sticker) async {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           backgroundColor: scheme.surfaceContainerHigh,
           shape: RoundedRectangleBorder(
@@ -749,7 +749,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
           actions: [
             M3ETextButton(
               size: M3EButtonSize.sm,
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             const SizedBox(width: MdSpacing.xs),
@@ -759,7 +759,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                 backgroundColor: WidgetStatePropertyAll(scheme.error),
                 foregroundColor: WidgetStatePropertyAll(scheme.onError),
               ),
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               icon: const Icon(Icons.delete_rounded, size: 18),
               label: const Text('Delete'),
             ),
@@ -767,9 +767,8 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
         );
       },
     );
-    if (confirmed == true && context.mounted) {
-      await widget.repository.delete(sticker.id);
-      if (context.mounted) Navigator.of(context).pop();
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop(true);
     }
   }
 }

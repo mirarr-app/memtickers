@@ -26,6 +26,7 @@ dependencies:
   uuid: ^4.5.1
   flutter_m3shapes_extended: ^1.2.1
   url_launcher: ^6.3.2
+  thanos_snap_effect: ^0.0.9
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +36,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  shaders:
+    - packages/thanos_snap_effect/shader/thanos_snap_effect.glsl
   assets:
     - assets/models/isnet-general-use-q8.onnx
     - assets/models/mobileclip-s0-vision.onnx

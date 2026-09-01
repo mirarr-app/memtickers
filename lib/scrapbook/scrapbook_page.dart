@@ -27,6 +27,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
   final _transform = TransformationController();
   AnimationController? _matrixAnimationController;
   String? _droppingId;
+  String? _snappingId;
   StickerSearchFilter? _activeFilter;
 
   bool get _isSearching => _activeFilter != null && _activeFilter!.isNotEmpty;
@@ -130,12 +131,22 @@ class _ScrapbookPageState extends State<ScrapbookPage>
     });
   }
 
-  void _openDetails(Sticker sticker) {
-    showStickerDetails(
+  Future<void> _openDetails(Sticker sticker) async {
+    final deleted = await showStickerDetails(
       context: context,
       sticker: sticker,
       repository: widget.repository,
     );
+
+    if (deleted == true && mounted) {
+      setState(() => _snappingId = sticker.id);
+      M3EHapticFeedback.heavy.apply();
+      await Future<void>.delayed(const Duration(milliseconds: 1400));
+      if (mounted) {
+        await widget.repository.delete(sticker.id);
+        setState(() => _snappingId = null);
+      }
+    }
   }
 
   Future<void> _openSearch() async {
@@ -236,6 +247,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                   searchFilter: _activeFilter,
                   onBundledStickerTap: _onBundledStickerTap,
                   droppingId: _droppingId,
+                  snappingId: _snappingId,
                   onStickerTap: _openDetails,
                 ),
               ),

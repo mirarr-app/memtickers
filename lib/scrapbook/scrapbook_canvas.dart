@@ -53,6 +53,7 @@ class ScrapbookCanvas extends StatefulWidget {
     this.searchFilter,
     this.onBundledStickerTap,
     this.droppingId,
+    this.snappingId,
   });
 
   final StickerRepository repository;
@@ -61,6 +62,7 @@ class ScrapbookCanvas extends StatefulWidget {
   final StickerSearchFilter? searchFilter;
   final ValueChanged<Sticker>? onBundledStickerTap;
   final String? droppingId;
+  final String? snappingId;
 
   @override
   State<ScrapbookCanvas> createState() => _ScrapbookCanvasState();
@@ -185,6 +187,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                           sticker: item.sticker,
                           selected: _selectedId == item.sticker.id,
                           dropping: widget.droppingId == item.sticker.id,
+                          snapping: widget.snappingId == item.sticker.id,
                           onTap: () {
                             M3EHapticFeedback.medium.apply();
                             widget.onBundledStickerTap?.call(item.sticker);
@@ -233,6 +236,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                               sticker: sticker,
                               selected: _selectedId == sticker.id,
                               dropping: widget.droppingId == sticker.id,
+                              snapping: widget.snappingId == sticker.id,
                               onTap: () {
                                 setState(() => _selectedId = sticker.id);
                                 widget.onStickerTap(sticker);
@@ -293,6 +297,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                                   sticker: sticker,
                                   selected: _selectedId == sticker.id,
                                   dropping: widget.droppingId == sticker.id,
+                                  snapping: widget.snappingId == sticker.id,
                                   onTap: () {
                                     setState(() => _selectedId = sticker.id);
                                     widget.onStickerTap(sticker);
