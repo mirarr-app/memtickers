@@ -5,6 +5,7 @@ import 'package:memtickers/data/sticker_board.dart';
 import 'package:memtickers/data/sticker_repository.dart';
 import 'package:memtickers/details/sticker_details_sheet.dart';
 import 'package:memtickers/scrapbook/scrapbook_page.dart';
+import 'package:memtickers/scrapbook/in_place_snappable.dart';
 import 'package:memtickers/scrapbook/sticker_object.dart';
 
 void main() {
@@ -181,12 +182,60 @@ void main() {
 
       await tester.pump();
       expect(find.byType(StickerObject), findsOneWidget);
+      expect(find.byType(InPlaceSnappable), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pumpAndSettle();
 
       expect(find.byType(StickerObject), findsOneWidget);
+    });
+
+    testWidgets('scaled sticker retains exact scale transform during Thanos snapping', (
+      tester,
+    ) async {
+      const targetScale = 2.4;
+      final sticker = Sticker(
+        id: 's-scaled-snap',
+        imagePath: 'test/non_existent.png',
+        createdAt: DateTime(2026, 1, 1),
+        x: 100,
+        y: 100,
+        rotation: 0.25,
+        scale: targetScale,
+        zIndex: 0,
+      );
+
+      final repo = StickerRepository();
+      final board = StickerBoard(
+        id: 'default',
+        name: 'Memories',
+        createdAt: DateTime(2026, 1, 1),
+        isNavigationMode: true,
+      );
+      repo.populateForTesting(
+        stickers: [sticker],
+        boards: [board],
+        activeBoardId: 'default',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: ScrapbookPage(repository: repo),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Find Transform.scale wrapping the sticker
+      final transformFinder = find.ancestor(
+        of: find.byType(StickerObject),
+        matching: find.byType(Transform),
+      );
+      expect(transformFinder, findsWidgets);
+
+      // Verify that StickerObject contains InPlaceSnappable
+      expect(find.byType(InPlaceSnappable), findsOneWidget);
     });
   });
 

@@ -4,9 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:thanos_snap_effect/thanos_snap_effect.dart';
-
 import '../data/sticker.dart';
+import 'in_place_snappable.dart';
 
 class StickerObject extends StatefulWidget {
   const StickerObject({
@@ -115,20 +114,20 @@ class _StickerObjectState extends State<StickerObject>
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        M3EHapticFeedback.light.apply();
-        widget.onTap();
-      },
-      onLongPress: widget.onLongPress,
-      child: Snappable(
+      onTap: widget.snapping
+          ? null
+          : () {
+              M3EHapticFeedback.light.apply();
+              widget.onTap();
+            },
+      onLongPress: widget.snapping ? null : widget.onLongPress,
+      child: InPlaceSnappable(
         animation: _snapController,
-        outerPadding: EdgeInsets.zero,
-        style: const SnappableStyle(
-          particleLifetime: 0.65,
-          fadeOutDuration: 0.35,
-          particleSpeed: 1.1,
-          particleSize: SnappableParticleSize.squareFromRelativeWidth(0.015),
-        ),
+        outerPadding: const EdgeInsets.fromLTRB(200, 320, 200, 100),
+        particleLifetime: 0.65,
+        fadeOutDuration: 0.35,
+        particleSpeed: 1.1,
+        relativeParticleSize: 0.015,
         child: AnimatedBuilder(
           animation: _stickController,
           builder: (context, child) {

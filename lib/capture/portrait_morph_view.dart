@@ -66,7 +66,7 @@ class _PortraitMorphViewState extends State<PortraitMorphView>
 
   double _interactiveProgress = 1.0;
   bool _isInteracting = false;
-  double _time = 0.0;
+  final double _time = 0.0;
   Timer? _timeTimer;
 
   Offset _origin = const Offset(0.1, 0.1);
