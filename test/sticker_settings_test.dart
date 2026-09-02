@@ -17,26 +17,37 @@ void main() {
       const settings = StickerSettings();
       expect(settings.saturation, 1.0);
       expect(settings.brightness, 1.0);
+      expect(settings.hapticFeedbackEnabled, true);
       expect(settings.isDefault, true);
     });
 
     test('toMap and fromMap', () {
-      const settings = StickerSettings(saturation: 1.4, brightness: 0.8);
+      const settings = StickerSettings(
+        saturation: 1.4,
+        brightness: 0.8,
+        hapticFeedbackEnabled: false,
+      );
       final map = settings.toMap();
       expect(map['saturation'], 1.4);
       expect(map['brightness'], 0.8);
+      expect(map['hapticFeedbackEnabled'], 0);
 
       final restored = StickerSettings.fromMap(map);
       expect(restored.saturation, 1.4);
       expect(restored.brightness, 0.8);
+      expect(restored.hapticFeedbackEnabled, false);
       expect(restored.isDefault, false);
     });
 
     test('copyWith', () {
       const settings = StickerSettings();
-      final updated = settings.copyWith(saturation: 1.25);
+      final updated = settings.copyWith(
+        saturation: 1.25,
+        hapticFeedbackEnabled: false,
+      );
       expect(updated.saturation, 1.25);
       expect(updated.brightness, 1.0);
+      expect(updated.hapticFeedbackEnabled, false);
     });
   });
 
@@ -103,6 +114,8 @@ void main() {
       expect(find.text('Sticker Adjustments'), findsOneWidget);
       expect(find.text('Saturation'), findsOneWidget);
       expect(find.text('Brightness'), findsOneWidget);
+      expect(find.text('Haptic Feedback'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
       expect(find.byType(M3ESlider), findsNWidgets(2));
       expect(find.text('Reset to default'), findsOneWidget);
       expect(find.text('Save settings'), findsOneWidget);

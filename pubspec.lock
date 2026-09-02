@@ -376,6 +376,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.8"
+  haptic_kit:
+    dependency: "direct main"
+    description:
+      name: haptic_kit
+      sha256: e17ed387827c35b93a78752ef2ac3323b7773d8307809e71bc32c5956fa97f0f
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   hooks:
     dependency: transitive
     description:

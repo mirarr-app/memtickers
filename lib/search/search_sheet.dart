@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker_repository.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 import 'sticker_search_filter.dart';
 
@@ -159,13 +160,13 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
     );
 
     if (picked != null) {
-      M3EHapticFeedback.light.apply();
+      AppHaptics.selection();
       setState(() => _dateRange = picked);
     }
   }
 
   void _clearAll() {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     setState(() {
       _selectedTags.clear();
       _selectedModelTags.clear();
@@ -177,7 +178,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
   }
 
   void _applyAndClose() {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     final filter = _currentFilter;
     Navigator.of(context).pop(filter.isEmpty ? null : filter);
   }
@@ -295,7 +296,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                           color: scheme.onTertiaryContainer,
                         ),
                         onDeleted: () {
-                          M3EHapticFeedback.light.apply();
+                          AppHaptics.lightImpact();
                           setState(() => _selectedModelTags.remove(tag));
                         },
                       );
@@ -347,7 +348,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                   onSubmitted: (val) {
                     final query = val.trim().toLowerCase();
                     if (query.isNotEmpty) {
-                      M3EHapticFeedback.light.apply();
+                      AppHaptics.selection();
                       setState(() {
                         _selectedModelTags.add(query);
                         _aiTagController.clear();
@@ -393,7 +394,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                                 color: scheme.tertiary.withValues(alpha: 0.3),
                               ),
                               onPressed: () {
-                                M3EHapticFeedback.light.apply();
+                                AppHaptics.selection();
                                 setState(() {
                                   _selectedModelTags.add(tag);
                                   _aiTagController.clear();
@@ -417,7 +418,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                               ),
                               side: BorderSide(color: scheme.tertiary),
                               onPressed: () {
-                                M3EHapticFeedback.light.apply();
+                                AppHaptics.selection();
                                 setState(() {
                                   _selectedModelTags.add(_aiTagQuery);
                                   _aiTagController.clear();
@@ -487,7 +488,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                             : FontWeight.normal,
                       ),
                       onSelected: (val) {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.selection();
                         setState(() {
                           if (val) {
                             _selectedTags.add(tag.name);
@@ -509,7 +510,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                 trailing: _dateRange != null
                     ? InkWell(
                         onTap: () {
-                          M3EHapticFeedback.light.apply();
+                          AppHaptics.lightImpact();
                           setState(() => _dateRange = null);
                         },
                         borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
@@ -596,7 +597,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                 trailing: _locationController.text.isNotEmpty
                     ? InkWell(
                         onTap: () {
-                          M3EHapticFeedback.light.apply();
+                          AppHaptics.lightImpact();
                           setState(() => _locationController.clear());
                         },
                         borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
@@ -672,7 +673,7 @@ class _SearchSheetBodyState extends State<_SearchSheetBody> {
                             : FontWeight.normal,
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.selection();
                         setState(() {
                           if (isSelected) {
                             _locationController.clear();

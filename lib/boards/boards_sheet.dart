@@ -3,6 +3,7 @@ import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker_board.dart';
 import '../data/sticker_repository.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 
 Future<void> showBoardsSheet({
@@ -110,7 +111,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
 
     setState(() => _isSubmitting = true);
     try {
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.success();
       final newBoard = await widget.repository.createBoard(text);
       _boardInputController.clear();
       _boardFocusNode.unfocus();
@@ -226,7 +227,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
         }
         return;
       }
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.mediumImpact();
       await widget.repository.updateBoard(board.id, newName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -314,7 +315,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
     );
 
     if (confirmed == true) {
-      M3EHapticFeedback.heavy.apply();
+      AppHaptics.heavyImpact();
       await widget.repository.deleteBoard(board.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -465,7 +466,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                       child: InkWell(
                         borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
                         onTap: () {
-                          M3EHapticFeedback.medium.apply();
+                          AppHaptics.mediumImpact();
                           widget.repository.setActiveBoard(board.id);
                           widget.onBoardSelected?.call(board);
                         },
@@ -637,7 +638,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                       : null,
                                 ),
                                 onPressed: () async {
-                                  M3EHapticFeedback.medium.apply();
+                                  AppHaptics.mediumImpact();
                                   final willEnable = !board.isNavigationMode;
                                   await widget.repository.toggleBoardNavigationMode(board.id);
                                   if (context.mounted) {
@@ -662,7 +663,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                   minimumSize: const Size(32, 32),
                                 ),
                                 onPressed: () {
-                                  M3EHapticFeedback.light.apply();
+                                  AppHaptics.lightImpact();
                                   _editBoard(board);
                                 },
                               ),
@@ -679,7 +680,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                     minimumSize: const Size(32, 32),
                                   ),
                                   onPressed: () {
-                                    M3EHapticFeedback.light.apply();
+                                    AppHaptics.lightImpact();
                                     _deleteBoard(board);
                                   },
                                 ),

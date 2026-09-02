@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../tags/tag_selection_sheet.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 
 Future<bool?> showStickerDetails({
@@ -149,7 +150,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
       initialSelectedTags: Set<String>.from(sticker.tags),
     );
     if (updated != null) {
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.mediumImpact();
       await widget.repository.setStickerTags(sticker.id, updated.toList());
     }
   }
@@ -166,7 +167,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
     if (selectedBoardId != null &&
         selectedBoardId != sticker.boardId &&
         context.mounted) {
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.mediumImpact();
       await widget.repository.moveStickerToBoard(sticker.id, selectedBoardId);
       final destBoard = widget.repository.boards
           .where((b) => b.id == selectedBoardId)
@@ -308,7 +309,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                 onTap: (index) {
                   final onTap = rows[index].$4;
                   if (onTap != null) {
-                    M3EHapticFeedback.light.apply();
+                    AppHaptics.lightImpact();
                     onTap();
                   }
                 },
@@ -476,14 +477,14 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                                       color: scheme.onTertiaryContainer,
                                     ),
                                     onDeleted: () {
-                                      M3EHapticFeedback.light.apply();
+                                      AppHaptics.lightImpact();
                                       widget.repository.removeModelTag(
                                         sticker.id,
                                         tag,
                                       );
                                     },
                                     onPressed: () {
-                                      M3EHapticFeedback.light.apply();
+                                      AppHaptics.lightImpact();
                                       if (!isUserTag) {
                                         widget.repository.promoteModelTagToUserTag(
                                           sticker.id,
@@ -583,7 +584,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                         ),
                         InkWell(
                           onTap: () {
-                            M3EHapticFeedback.light.apply();
+                            AppHaptics.lightImpact();
                             _manageStickerTags(context, sticker);
                           },
                           borderRadius: BorderRadius.circular(
@@ -603,7 +604,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Edit',
+                                  'Manage',
                                   style: textTheme.labelSmall?.copyWith(
                                     color: scheme.primary,
                                     fontWeight: FontWeight.w600,
@@ -615,19 +616,20 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: MdSpacing.xs),
                     if (sticker.tags.isEmpty)
                       Text(
-                        'No user tags assigned.',
+                        'No user tags assigned yet. Tap "Manage" to categorize this memory sticker.',
                         style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontStyle: FontStyle.italic,
+                          color: scheme.onSurfaceVariant.withValues(
+                            alpha: 0.8,
+                          ),
                         ),
                       )
                     else
                       Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
+                        spacing: MdSpacing.xs,
+                        runSpacing: MdSpacing.xxs,
                         children: [
                           for (final tag in sticker.tags)
                             Container(
@@ -636,7 +638,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: scheme.secondaryContainer.withValues(
+                                color: scheme.primaryContainer.withValues(
                                   alpha: 0.6,
                                 ),
                                 borderRadius: BorderRadius.circular(
@@ -646,7 +648,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                               child: Text(
                                 '#$tag',
                                 style: textTheme.labelSmall?.copyWith(
-                                  color: scheme.onSecondaryContainer,
+                                  color: scheme.onPrimaryContainer,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -666,7 +668,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                     child: M3EFilledButton.tonalIcon(
                       size: M3EButtonSize.sm,
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _moveStickerBoard(context, sticker);
                       },
                       icon: const Icon(
@@ -689,7 +691,7 @@ class _StickerDetailsBodyState extends State<_StickerDetailsBody> {
                         ),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.medium.apply();
+                        AppHaptics.mediumImpact();
                         _confirmDelete(sticker);
                       },
                       icon: const Icon(Icons.delete_outline_rounded, size: 18),

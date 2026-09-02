@@ -10,6 +10,7 @@ import '../search/search_sheet.dart';
 import '../search/sticker_search_filter.dart';
 import '../settings/sticker_settings_sheet.dart';
 import '../tags/tags_sheet.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 import 'scrapbook_canvas.dart';
 
@@ -140,7 +141,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
 
     if (deleted == true && mounted) {
       setState(() => _snappingId = sticker.id);
-      M3EHapticFeedback.heavy.apply();
+      AppHaptics.snapDisintegrate();
       await Future<void>.delayed(const Duration(milliseconds: 1400));
       if (mounted) {
         await widget.repository.delete(sticker.id);
@@ -179,7 +180,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
   }
 
   void _onBundledStickerTap(Sticker sticker) {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     setState(() {
       _activeFilter = null;
       _droppingId = sticker.id;
@@ -319,7 +320,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                               backgroundColor: scheme.surfaceContainerHigh,
                             ),
                             onPressed: () {
-                              M3EHapticFeedback.light.apply();
+                              AppHaptics.lightImpact();
                               setState(() => _activeFilter = null);
                             },
                           ),
@@ -346,7 +347,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: () {
-                      M3EHapticFeedback.light.apply();
+                      AppHaptics.lightImpact();
                       _openBoards();
                     },
                     child: Padding(
@@ -424,7 +425,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                           M3EFilledButton.icon(
                             size: M3EButtonSize.sm,
                             onPressed: () {
-                              M3EHapticFeedback.medium.apply();
+                              AppHaptics.mediumImpact();
                               _openCapture(gallery: false);
                             },
                             icon: const Icon(
@@ -436,7 +437,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                           M3EFilledButton.tonalIcon(
                             size: M3EButtonSize.sm,
                             onPressed: () {
-                              M3EHapticFeedback.medium.apply();
+                              AppHaptics.mediumImpact();
                               _openCapture(gallery: true);
                             },
                             icon: const Icon(
@@ -485,7 +486,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         padding: const EdgeInsets.all(MdSpacing.xs),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _openCapture(gallery: true);
                       },
                       icon: const Icon(Icons.photo_library_outlined, size: 22),
@@ -494,7 +495,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                     M3EFilledButton.icon(
                       size: M3EButtonSize.sm,
                       onPressed: () {
-                        M3EHapticFeedback.medium.apply();
+                        AppHaptics.mediumImpact();
                         _openCapture(gallery: false);
                       },
                       icon: const Icon(Icons.camera_alt_rounded, size: 20),
@@ -508,7 +509,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         padding: const EdgeInsets.all(MdSpacing.xs),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _openBoards();
                       },
                       icon: const Icon(
@@ -529,7 +530,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         padding: const EdgeInsets.all(MdSpacing.xs),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _openSearch();
                       },
                       icon: Icon(
@@ -547,7 +548,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         padding: const EdgeInsets.all(MdSpacing.xs),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _openTags();
                       },
                       icon: const Icon(Icons.label_outline_rounded, size: 22),
@@ -560,7 +561,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         padding: const EdgeInsets.all(MdSpacing.xs),
                       ),
                       onPressed: () {
-                        M3EHapticFeedback.light.apply();
+                        AppHaptics.lightImpact();
                         _openSettings();
                       },
                       icon: const Icon(Icons.tune_rounded, size: 22),

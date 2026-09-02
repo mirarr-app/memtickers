@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../search/sticker_search_filter.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 import 'sticker_object.dart';
 
@@ -93,6 +93,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
   }
 
   Future<void> _bringToFront(Sticker sticker) async {
+    AppHaptics.selection();
     final updated = sticker.copyWith(zIndex: widget.repository.nextZIndex());
     await widget.repository.updateTransform(updated);
     setState(() => _selectedId = sticker.id);
@@ -189,7 +190,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                           dropping: widget.droppingId == item.sticker.id,
                           snapping: widget.snappingId == item.sticker.id,
                           onTap: () {
-                            M3EHapticFeedback.medium.apply();
+                            AppHaptics.mediumImpact();
                             widget.onBundledStickerTap?.call(item.sticker);
                           },
                           onLongPress: () {},

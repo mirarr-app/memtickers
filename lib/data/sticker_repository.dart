@@ -7,6 +7,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../capture/auto_tag_service.dart';
+import '../theme/app_haptics.dart';
 import 'sticker.dart';
 import 'sticker_board.dart';
 import 'sticker_database.dart';
@@ -126,6 +127,8 @@ class StickerRepository extends ChangeNotifier {
           if (_boards.any((b) => b.id == value)) {
             _activeBoardId = value;
           }
+        } else if (key == 'hapticFeedbackEnabled') {
+          settingsMap[key] = value == '1' || value.toLowerCase() == 'true';
         } else {
           final val = double.tryParse(value);
           if (val != null) {
@@ -134,6 +137,7 @@ class StickerRepository extends ChangeNotifier {
         }
       }
       _settings = StickerSettings.fromMap(settingsMap);
+      AppHaptics.enabled = _settings.hapticFeedbackEnabled;
     } catch (_) {}
 
     if (!_boards.any((b) => b.id == _activeBoardId)) {
@@ -437,6 +441,7 @@ class StickerRepository extends ChangeNotifier {
 
   Future<void> updateSettings(StickerSettings newSettings) async {
     _settings = newSettings;
+    AppHaptics.enabled = newSettings.hapticFeedbackEnabled;
     final db = await StickerDatabase.instance();
     await db.insert('settings', {
       'key': 'saturation',
@@ -445,6 +450,10 @@ class StickerRepository extends ChangeNotifier {
     await db.insert('settings', {
       'key': 'brightness',
       'value': newSettings.brightness.toString(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert('settings', {
+      'key': 'hapticFeedbackEnabled',
+      'value': newSettings.hapticFeedbackEnabled ? '1' : '0',
     }, conflictAlgorithm: ConflictAlgorithm.replace);
     notifyListeners();
   }

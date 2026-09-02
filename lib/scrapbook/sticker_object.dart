@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:m3e_core/m3e_core.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../data/sticker.dart';
+import '../theme/app_haptics.dart';
 import 'in_place_snappable.dart';
 
 class StickerObject extends StatefulWidget {
@@ -54,7 +54,7 @@ class _StickerObjectState extends State<StickerObject>
     _stickController.addListener(() {
       if (_stickController.value >= 0.50 && !_impactHapticFired) {
         _impactHapticFired = true;
-        M3EHapticFeedback.medium.apply();
+        AppHaptics.stickerStick();
       }
     });
 
@@ -94,7 +94,7 @@ class _StickerObjectState extends State<StickerObject>
 
   void _startSticking() {
     _impactHapticFired = false;
-    M3EHapticFeedback.light.apply();
+    AppHaptics.lightImpact();
     _stickController.forward(from: 0.0);
   }
 
@@ -117,7 +117,7 @@ class _StickerObjectState extends State<StickerObject>
       onTap: widget.snapping
           ? null
           : () {
-              M3EHapticFeedback.light.apply();
+              AppHaptics.lightImpact();
               widget.onTap();
             },
       onLongPress: widget.snapping ? null : widget.onLongPress,

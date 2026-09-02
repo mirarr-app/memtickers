@@ -3,6 +3,7 @@ import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker_repository.dart';
 import '../data/sticker_tag.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 
 Future<void> showTagsSheet({
@@ -100,7 +101,7 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
 
     setState(() => _isSubmitting = true);
     try {
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.success();
       await widget.repository.createTag(text);
       _tagInputController.clear();
     } finally {
@@ -207,7 +208,7 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
         }
         return;
       }
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.mediumImpact();
       await widget.repository.updateTag(tag.id, newName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -285,7 +286,7 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
     );
 
     if (confirmed == true) {
-      M3EHapticFeedback.heavy.apply();
+      AppHaptics.heavyImpact();
       await widget.repository.deleteTag(tag.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -542,7 +543,7 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
                                     minimumSize: const Size(32, 32),
                                   ),
                                   onPressed: () {
-                                    M3EHapticFeedback.light.apply();
+                                    AppHaptics.lightImpact();
                                     _editTag(tag);
                                   },
                                 ),
@@ -558,7 +559,7 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
                                     minimumSize: const Size(32, 32),
                                   ),
                                   onPressed: () {
-                                    M3EHapticFeedback.light.apply();
+                                    AppHaptics.lightImpact();
                                     _deleteTag(tag);
                                   },
                                 ),

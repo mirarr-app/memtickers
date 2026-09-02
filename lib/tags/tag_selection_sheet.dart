@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker_repository.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 
 /// Opens an M3 Expressive Tag Selection sheet that immediately focuses
@@ -108,7 +109,7 @@ class _TagSelectionBodyState extends State<_TagSelectionBody> {
 
     setState(() => _isCreating = true);
     try {
-      M3EHapticFeedback.medium.apply();
+      AppHaptics.success();
       final tag = await widget.repository.createTag(trimmed);
       setState(() {
         _selected.add(tag.name);
@@ -121,7 +122,7 @@ class _TagSelectionBodyState extends State<_TagSelectionBody> {
   }
 
   void _toggleTag(String tagName) {
-    M3EHapticFeedback.light.apply();
+    AppHaptics.selection();
     setState(() {
       if (_selected.contains(tagName)) {
         _selected.remove(tagName);

@@ -3,6 +3,7 @@ import 'package:m3e_core/m3e_core.dart';
 
 import '../data/sticker_repository.dart';
 import '../data/sticker_settings.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 
 Future<void> showStickerSettings({
@@ -67,12 +68,14 @@ class _StickerSettingsBody extends StatefulWidget {
 class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
   late double _saturation;
   late double _brightness;
+  late bool _hapticFeedbackEnabled;
 
   @override
   void initState() {
     super.initState();
     _saturation = widget.repository.settings.saturation;
     _brightness = widget.repository.settings.brightness;
+    _hapticFeedbackEnabled = widget.repository.settings.hapticFeedbackEnabled;
   }
 
   String _formatAdjustment(double value) {
@@ -84,25 +87,27 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
   }
 
   void _reset() {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     setState(() {
       _saturation = 1.0;
       _brightness = 1.0;
+      _hapticFeedbackEnabled = true;
     });
   }
 
   Future<void> _save() async {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     final updated = StickerSettings(
       saturation: _saturation,
       brightness: _brightness,
+      hapticFeedbackEnabled: _hapticFeedbackEnabled,
     );
     await widget.repository.updateSettings(updated);
     if (!mounted) return;
     Navigator.of(context).pop();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Sticker creation settings saved'),
+        content: Text('Settings saved'),
         duration: Duration(seconds: 2),
       ),
     );
@@ -187,7 +192,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   avatar: const Icon(Icons.refresh_rounded, size: 16),
                   label: const Text('Default (100%)'),
                   onPressed: () {
-                    M3EHapticFeedback.light.apply();
+                    AppHaptics.lightImpact();
                     setState(() {
                       _saturation = 1.0;
                       _brightness = 1.0;
@@ -199,7 +204,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   avatar: const Icon(Icons.auto_awesome, size: 16),
                   label: const Text('Vibrant (+30%)'),
                   onPressed: () {
-                    M3EHapticFeedback.light.apply();
+                    AppHaptics.lightImpact();
                     setState(() {
                       _saturation = 1.3;
                       _brightness = 1.05;
@@ -211,7 +216,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   avatar: const Icon(Icons.wb_twilight_rounded, size: 16),
                   label: const Text('Moody Soft'),
                   onPressed: () {
-                    M3EHapticFeedback.light.apply();
+                    AppHaptics.lightImpact();
                     setState(() {
                       _saturation = 0.85;
                       _brightness = 0.95;
@@ -223,7 +228,7 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                   avatar: const Icon(Icons.filter_b_and_w_rounded, size: 16),
                   label: const Text('Monochrome'),
                   onPressed: () {
-                    M3EHapticFeedback.light.apply();
+                    AppHaptics.lightImpact();
                     setState(() {
                       _saturation = 0.0;
                       _brightness = 1.0;
@@ -426,6 +431,73 @@ class _StickerSettingsBodyState extends State<_StickerSettingsBody> {
                       ),
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: MdSpacing.sm),
+
+          // Haptic Feedback Card
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: MdSpacing.sm,
+              vertical: MdSpacing.xs,
+            ),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(MdSpacing.radiusLg),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: scheme.tertiaryContainer.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(MdSpacing.radiusSm),
+                  ),
+                  child: Icon(
+                    Icons.vibration_rounded,
+                    size: 20,
+                    color: scheme.tertiary,
+                  ),
+                ),
+                const SizedBox(width: MdSpacing.xs),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Haptic Feedback',
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Tactile vibrations on taps, snaps & actions',
+                        style: textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _hapticFeedbackEnabled,
+                  onChanged: (val) {
+                    if (val) {
+                      // Fire an immediate subtle feedback acknowledging enabling
+                      AppHaptics.enabled = true;
+                      AppHaptics.lightImpact();
+                    } else {
+                      AppHaptics.lightImpact();
+                    }
+                    setState(() => _hapticFeedbackEnabled = val);
+                  },
                 ),
               ],
             ),

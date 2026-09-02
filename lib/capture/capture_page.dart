@@ -14,6 +14,7 @@ import 'package:uuid/uuid.dart';
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
 import '../tags/tag_selection_sheet.dart';
+import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 import 'auto_tag_service.dart';
 import 'dithered_image_view.dart';
@@ -248,7 +249,7 @@ class _CapturePageState extends State<CapturePage> {
         _takingPicture) {
       return;
     }
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.mediumImpact();
     setState(() => _takingPicture = true);
     await _ensureLocationOptional();
     try {
@@ -395,7 +396,7 @@ class _CapturePageState extends State<CapturePage> {
   }
 
   Future<void> _openTagSelection() async {
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.lightImpact();
     final updated = await showTagSelectionSheet(
       context: context,
       repository: widget.repository,
@@ -414,7 +415,7 @@ class _CapturePageState extends State<CapturePage> {
     final png = _previewPng;
     final meta = _pendingMeta;
     if (png == null || meta == null) return;
-    M3EHapticFeedback.medium.apply();
+    AppHaptics.success();
     final id = const Uuid().v4();
     final path = widget.repository.imagePathFor(id);
     await _processor.writePng(png, path);
@@ -736,7 +737,7 @@ class _CapturePageState extends State<CapturePage> {
                                         child: Center(
                                           child: GestureDetector(
                                             onTap: () {
-                                              M3EHapticFeedback.light.apply();
+                                              AppHaptics.selection();
                                               if (_currentZoom > 1.05) {
                                                 _setZoom(_minZoom);
                                               } else if (_maxZoom >= 2.0) {
