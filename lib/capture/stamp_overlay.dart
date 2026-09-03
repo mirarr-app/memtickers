@@ -60,19 +60,31 @@ class StampPainter extends CustomPainter {
     Color(0xFF6A1B9A), // Customs Purple
     Color(0xFF2E7D32), // Official Forest Green
     Color(0xFF263238), // Archival Ink Black
+    Color(0xFFFFFFFF), // Crisp Chalk White
   ];
+
+  static double _computeFontSize(int textLength) {
+    if (textLength <= 6) {
+      return 18.5;
+    } else if (textLength <= 10) {
+      return 17.0;
+    } else {
+      return 15.5;
+    }
+  }
 
   static Size computeStampSize(String rawText, {DateTime? date}) {
     final text = rawText.trim().toUpperCase();
     final headerText = date != null
         ? DateFormat('dd.MM.yy').format(date)
         : '★ OFFICIAL ★';
+    final fontSize = _computeFontSize(text.length);
 
     final headerPainter = TextPainter(
       text: TextSpan(
         text: headerText,
         style: const TextStyle(
-          fontSize: 7.5,
+          fontSize: 8.0,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.5,
           fontFamily: 'monospace',
@@ -84,10 +96,10 @@ class StampPainter extends CustomPainter {
     final mainPainter = TextPainter(
       text: TextSpan(
         text: text.isEmpty ? 'STAMP' : text,
-        style: const TextStyle(
-          fontSize: 13.0,
+        style: TextStyle(
+          fontSize: fontSize,
           fontWeight: FontWeight.w900,
-          letterSpacing: 2.2,
+          letterSpacing: 2.0,
           fontFamily: 'monospace',
         ),
       ),
@@ -95,10 +107,10 @@ class StampPainter extends CustomPainter {
     )..layout();
 
     final contentWidth = math.max(mainPainter.width, headerPainter.width);
-    final boxWidth = math.max(88.0, contentWidth + 24.0);
-    final boxHeight = mainPainter.height + headerPainter.height + 16.0;
-    const wavyWidth = 44.0;
-    const wavyGap = 6.0;
+    final boxWidth = math.max(96.0, contentWidth + 28.0);
+    final boxHeight = math.max(46.0, mainPainter.height + headerPainter.height + 18.0);
+    const wavyWidth = 46.0;
+    const wavyGap = 7.0;
 
     return Size(boxWidth + wavyGap + wavyWidth, boxHeight);
   }
@@ -112,6 +124,8 @@ class StampPainter extends CustomPainter {
     if (text.isEmpty) return;
 
     final color = config.color;
+    final isWhite = color.toARGB32() == 0xFFFFFFFF;
+    final fontSize = _computeFontSize(text.length);
     final headerText = config.date != null
         ? DateFormat('dd.MM.yy').format(config.date!)
         : '★ OFFICIAL ★';
@@ -120,11 +134,22 @@ class StampPainter extends CustomPainter {
       text: TextSpan(
         text: headerText,
         style: TextStyle(
-          color: color.withValues(alpha: 0.75),
-          fontSize: 7.5,
+          color: isWhite
+              ? Colors.white.withValues(alpha: 0.85)
+              : color.withValues(alpha: 0.80),
+          fontSize: 8.0,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.5,
           fontFamily: 'monospace',
+          shadows: [
+            Shadow(
+              color: isWhite
+                  ? Colors.black.withValues(alpha: 0.70)
+                  : Colors.black.withValues(alpha: 0.25),
+              offset: const Offset(0.6, 0.8),
+              blurRadius: 1.5,
+            ),
+          ],
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -134,52 +159,92 @@ class StampPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: TextStyle(
-          color: color.withValues(alpha: 0.92),
-          fontSize: 13.0,
+          color: color,
+          fontSize: fontSize,
           fontWeight: FontWeight.w900,
-          letterSpacing: 2.2,
+          letterSpacing: 2.0,
           fontFamily: 'monospace',
+          shadows: [
+            Shadow(
+              color: isWhite
+                  ? Colors.black.withValues(alpha: 0.80)
+                  : Colors.black.withValues(alpha: 0.35),
+              offset: const Offset(0.8, 1.2),
+              blurRadius: 2.5,
+            ),
+            if (isWhite)
+              Shadow(
+                color: Colors.black.withValues(alpha: 0.50),
+                offset: const Offset(-0.6, -0.6),
+                blurRadius: 1.5,
+              ),
+          ],
         ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
 
     final contentWidth = math.max(mainPainter.width, headerPainter.width);
-    final boxWidth = math.max(88.0, contentWidth + 24.0);
-    final boxHeight = mainPainter.height + headerPainter.height + 16.0;
+    final boxWidth = math.max(96.0, contentWidth + 28.0);
+    final boxHeight = math.max(46.0, mainPainter.height + headerPainter.height + 18.0);
 
-    // 1. Rubber Stamp Outer Frame
     final outerRect = Rect.fromLTWH(0, 0, boxWidth, boxHeight);
     final outerRRect = RRect.fromRectAndRadius(
       outerRect,
-      const Radius.circular(4.5),
+      const Radius.circular(5.0),
     );
+
+    // 0. Contrast Tint Backing Wash for legibility against complex photo backgrounds
+    final bgWashPaint = Paint()
+      ..color = isWhite
+          ? Colors.black.withValues(alpha: 0.28)
+          : (color.toARGB32() == 0xFF263238
+              ? Colors.white.withValues(alpha: 0.25)
+              : color.withValues(alpha: 0.12))
+      ..style = PaintingStyle.fill;
+    canvas.drawRRect(outerRRect, bgWashPaint);
+
+    // If white: draw a dark drop shadow behind the frame strokes so white pops on light surfaces
+    if (isWhite) {
+      final shadowRRect = outerRRect.shift(const Offset(0.8, 1.2));
+      final strokeShadowPaint = Paint()
+        ..color = Colors.black.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6;
+      canvas.drawRRect(shadowRRect, strokeShadowPaint);
+    }
+
+    // 1. Rubber Stamp Outer Frame
     final outerPaint = Paint()
-      ..color = color.withValues(alpha: 0.90)
+      ..color = isWhite ? Colors.white : color.withValues(alpha: 0.95)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
+      ..strokeWidth = 2.6;
     canvas.drawRRect(outerRRect, outerPaint);
 
     // 2. Rubber Stamp Inner Frame
-    final innerRect = outerRect.deflate(3.2);
+    final innerRect = outerRect.deflate(3.5);
     final innerRRect = RRect.fromRectAndRadius(
       innerRect,
-      const Radius.circular(2.5),
+      const Radius.circular(3.0),
     );
     final innerPaint = Paint()
-      ..color = color.withValues(alpha: 0.65)
+      ..color = isWhite
+          ? Colors.white.withValues(alpha: 0.85)
+          : color.withValues(alpha: 0.70)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9;
+      ..strokeWidth = 1.1;
     canvas.drawRRect(innerRRect, innerPaint);
 
     // 3. Subtle Decorative Divider
-    final dividerY = 5.0 + headerPainter.height + 2.0;
+    final dividerY = 5.0 + headerPainter.height + 2.5;
     final dividerPaint = Paint()
-      ..color = color.withValues(alpha: 0.40)
-      ..strokeWidth = 0.7;
+      ..color = isWhite
+          ? Colors.white.withValues(alpha: 0.50)
+          : color.withValues(alpha: 0.45)
+      ..strokeWidth = 0.8;
     canvas.drawLine(
-      Offset(8.0, dividerY),
-      Offset(boxWidth - 8.0, dividerY),
+      Offset(10.0, dividerY),
+      Offset(boxWidth - 10.0, dividerY),
       dividerPaint,
     );
 
@@ -192,26 +257,44 @@ class StampPainter extends CustomPainter {
     final mainY = dividerY + 3.0;
     mainPainter.paint(canvas, Offset(mainX, mainY));
 
-    // 6. Postal Cancellation Wavy Lines (extending out like a postmark)
-    final waveStartX = boxWidth + 5.0;
+    // 6. Postal Cancellation Wavy Lines
+    final waveStartX = boxWidth + 6.0;
     final waveEndX = size.width;
-    final wavePaint = Paint()
-      ..color = color.withValues(alpha: 0.80)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..strokeCap = StrokeCap.round;
 
     final lineYOffsets = [
-      boxHeight * 0.28,
+      boxHeight * 0.26,
       boxHeight * 0.50,
-      boxHeight * 0.72,
+      boxHeight * 0.74,
     ];
+
+    if (isWhite) {
+      final waveShadowPaint = Paint()
+        ..color = Colors.black.withValues(alpha: 0.40)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round;
+      for (final lineY in lineYOffsets) {
+        final path = Path();
+        path.moveTo(waveStartX + 0.8, lineY + 1.0);
+        for (double x = waveStartX; x <= waveEndX; x += 1.5) {
+          final waveY = lineY + 1.0 + math.sin((x - waveStartX) * 0.32) * 2.8;
+          path.lineTo(x + 0.8, waveY);
+        }
+        canvas.drawPath(path, waveShadowPaint);
+      }
+    }
+
+    final wavePaint = Paint()
+      ..color = isWhite ? Colors.white : color.withValues(alpha: 0.88)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
 
     for (final lineY in lineYOffsets) {
       final path = Path();
       path.moveTo(waveStartX, lineY);
       for (double x = waveStartX; x <= waveEndX; x += 1.5) {
-        final waveY = lineY + math.sin((x - waveStartX) * 0.32) * 2.6;
+        final waveY = lineY + math.sin((x - waveStartX) * 0.32) * 2.8;
         path.lineTo(x, waveY);
       }
       canvas.drawPath(path, wavePaint);
@@ -219,7 +302,9 @@ class StampPainter extends CustomPainter {
 
     // 7. Micro ink-bleed / distress speckles
     final specklePaint = Paint()
-      ..color = color.withValues(alpha: 0.35)
+      ..color = isWhite
+          ? Colors.white.withValues(alpha: 0.40)
+          : color.withValues(alpha: 0.35)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset(boxWidth * 0.15, boxHeight * 0.92), 0.7, specklePaint);
     canvas.drawCircle(Offset(boxWidth * 0.82, boxHeight * 0.12), 0.6, specklePaint);

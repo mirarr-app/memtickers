@@ -26,6 +26,10 @@ void main() {
       expect(updated.position, StampPosition.topLeft);
     });
 
+    test('StampPainter.inkColors includes white', () {
+      expect(StampPainter.inkColors.contains(const Color(0xFFFFFFFF)), true);
+    });
+
     test('computeStampSize adapts to text length', () {
       final sizeShort = StampPainter.computeStampSize('HI');
       final sizeLong = StampPainter.computeStampSize('123456789012345'); // 15 chars

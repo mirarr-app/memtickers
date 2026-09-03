@@ -1237,57 +1237,99 @@ class _CapturePageState extends State<CapturePage> {
                                     Text(
                                       'Ink:',
                                       style: textTheme.labelSmall?.copyWith(
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         color: scheme.onSurfaceVariant
-                                            .withValues(alpha: 0.7),
-                                        fontWeight: FontWeight.w600,
+                                            .withValues(alpha: 0.75),
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                    const SizedBox(width: 6),
+                                    const SizedBox(width: 4),
                                     for (final color in StampPainter.inkColors)
                                       GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
                                         onTap: () {
                                           AppHaptics.selection();
                                           setState(() {
                                             _stampColor = color;
                                           });
                                         },
-                                        child: Container(
-                                          margin: const EdgeInsets.symmetric(
-                                            horizontal: 3,
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 4,
                                           ),
-                                          width: 17,
-                                          height: 17,
-                                          decoration: BoxDecoration(
-                                            color: color,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: _stampColor == color
-                                                  ? scheme.onSurface
-                                                  : Colors.transparent,
-                                              width: 1.8,
-                                            ),
-                                            boxShadow: [
-                                              if (_stampColor == color)
+                                          child: Container(
+                                            width: 26,
+                                            height: 26,
+                                            decoration: BoxDecoration(
+                                              color: color,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: _stampColor == color
+                                                    ? (color ==
+                                                            const Color(
+                                                              0xFFFFFFFF,
+                                                            )
+                                                        ? scheme.primary
+                                                        : scheme.onSurface)
+                                                    : (color ==
+                                                            const Color(
+                                                              0xFFFFFFFF,
+                                                            )
+                                                        ? scheme.outlineVariant
+                                                        : Colors.transparent),
+                                                width: _stampColor == color
+                                                    ? 2.4
+                                                    : 1.2,
+                                              ),
+                                              boxShadow: [
                                                 BoxShadow(
-                                                  color: color.withValues(
-                                                    alpha: 0.4,
-                                                  ),
-                                                  blurRadius: 4,
-                                                  spreadRadius: 1,
+                                                  color: Colors.black
+                                                      .withValues(alpha: 0.15),
+                                                  blurRadius: 3,
+                                                  offset: const Offset(0, 1),
                                                 ),
-                                            ],
+                                                if (_stampColor == color)
+                                                  BoxShadow(
+                                                    color: color ==
+                                                            const Color(
+                                                              0xFFFFFFFF,
+                                                            )
+                                                        ? scheme.primary
+                                                            .withValues(
+                                                              alpha: 0.35,
+                                                            )
+                                                        : color.withValues(
+                                                            alpha: 0.45,
+                                                          ),
+                                                    blurRadius: 6,
+                                                    spreadRadius: 1,
+                                                  ),
+                                              ],
+                                            ),
+                                            child: _stampColor == color
+                                                ? Icon(
+                                                    Icons.check_rounded,
+                                                    size: 15,
+                                                    color: color ==
+                                                            const Color(
+                                                              0xFFFFFFFF,
+                                                            )
+                                                        ? Colors.black87
+                                                        : Colors.white,
+                                                  )
+                                                : null,
                                           ),
                                         ),
                                       ),
                                     const Spacer(),
                                     Text(
-                                      'Drag stamp to adjust',
+                                      'Drag to position',
                                       style: textTheme.labelSmall?.copyWith(
-                                        fontSize: 9.5,
+                                        fontSize: 10,
                                         fontStyle: FontStyle.italic,
                                         color: scheme.onSurfaceVariant
-                                            .withValues(alpha: 0.55),
+                                            .withValues(alpha: 0.6),
                                       ),
                                     ),
                                   ],
