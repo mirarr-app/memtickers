@@ -47,7 +47,7 @@ void main() {
     expect(find.byType(M3ELoadingIndicator), findsOneWidget);
   });
 
-  testWidgets('AnimatedDitherView scans from clean image to dithered effect', (
+  testWidgets('LiquidChromeLoader renders image and animates frames', (
     tester,
   ) async {
     final image = await _createTestImage();
@@ -58,35 +58,23 @@ void main() {
           body: SizedBox(
             width: 300,
             height: 300,
-            child: AnimatedDitherView(
+            child: LiquidChromeLoader(
               image: image,
-              scanDuration: const Duration(milliseconds: 300),
-              child: const Center(
-                child: M3ELoadingIndicator(
-                  semanticsLabel: 'Scanning subject',
-                ),
-              ),
             ),
           ),
         ),
       ),
     );
 
-    // Initial frame: clean image is rendered, scan starting
-    expect(find.byType(AnimatedDitherView), findsOneWidget);
-    expect(find.byType(M3ELoadingIndicator), findsOneWidget);
+    // Initial frame renders loader with base image
+    expect(find.byType(LiquidChromeLoader), findsOneWidget);
     expect(find.byType(RawImage), findsOneWidget);
 
-    // Mid-animation: laser scan is active, revealing dither
-    await tester.pump(const Duration(milliseconds: 150));
-    expect(find.byType(CustomPaint), findsWidgets);
+    // Advancing time animates the liquid chrome shader without errors
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byType(LiquidChromeLoader), findsOneWidget);
 
-    // Complete animation: scan complete, dither fully revealed, pulsing started
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byType(DitheredImageView), findsOneWidget);
-
-    // Pump further to verify ambient breathing animation does not error
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(AnimatedDitherView), findsOneWidget);
+    expect(find.byType(LiquidChromeLoader), findsOneWidget);
   });
 }

@@ -1062,62 +1062,9 @@ class _CapturePageState extends State<CapturePage>
   Widget _buildProcessingContent(ColorScheme scheme, TextTheme textTheme) {
     return Container(
       key: const ValueKey('processing_viewport'),
-      child: AnimatedDitherView(
+      child: LiquidChromeLoader(
         image: _sourceUiImage,
         imageBytes: _sourceImageBytes,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(MdSpacing.md),
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.88),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.18),
-                      blurRadius: 18,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const M3ELoadingIndicator(
-                  semanticsLabel: 'Cutting out subject',
-                ),
-              ),
-              const SizedBox(height: MdSpacing.sm),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: Container(
-                  key: ValueKey(_status ?? 'Cutting out the subject…'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: MdSpacing.sm,
-                    vertical: MdSpacing.xxs,
-                  ),
-                  decoration: BoxDecoration(
-                    color: scheme.surface.withValues(alpha: 0.90),
-                    borderRadius: BorderRadius.circular(MdSpacing.radiusFull),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.12),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Text(
-                    _status ?? 'Cutting out the subject…',
-                    style: textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
