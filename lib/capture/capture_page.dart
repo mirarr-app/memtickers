@@ -21,6 +21,7 @@ import 'dithered_image_view.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
 import 'segmentation_service.dart';
+import 'stamp_overlay.dart';
 import 'sticker_processor.dart';
 
 class CaptureResult {
@@ -69,6 +70,18 @@ class _CapturePageState extends State<CapturePage> {
   int _processGeneration = 0;
   ui.Image? _sourceUiImage;
   Uint8List? _sourceImageBytes;
+
+  // Stamp Controls
+  final TextEditingController _stampController = TextEditingController();
+  String _stampText = '';
+  Color _stampColor = StampPainter.inkColors.first;
+  StampPosition _stampPosition = StampPosition.bottomRight;
+  Offset? _stampCustomOffset;
+  int _stickerPixelWidth = 0;
+  int _stickerPixelHeight = 0;
+  Rect? _lastStickerRenderedRect;
+  Offset? _lastStampCenterInPreview;
+  Size? _lastStampSizeInPreview;
 
   // Flash and Zoom Controls
   FlashMode _flashMode = FlashMode.off;
@@ -335,8 +348,24 @@ class _CapturePageState extends State<CapturePage> {
       );
       if (!mounted || _processGeneration != gen) return;
 
+      int pixelW = 0;
+      int pixelH = 0;
+      try {
+        final codec = await ui.instantiateImageCodec(finalPng);
+        final frame = await codec.getNextFrame();
+        pixelW = frame.image.width;
+        pixelH = frame.image.height;
+        frame.image.dispose();
+      } catch (_) {}
+
       setState(() {
         _previewPng = finalPng;
+        _stickerPixelWidth = pixelW;
+        _stickerPixelHeight = pixelH;
+        _stampController.clear();
+        _stampText = '';
+        _stampCustomOffset = null;
+        _stampPosition = StampPosition.bottomRight;
         _pendingMeta = meta;
         _busy = false;
         _status = null;
@@ -379,6 +408,7 @@ class _CapturePageState extends State<CapturePage> {
       _camera?.resumePreview();
     } catch (_) {}
     _sourceUiImage?.dispose();
+    _stampController.clear();
     setState(() {
       _busy = false;
       _takingPicture = false;
@@ -388,6 +418,9 @@ class _CapturePageState extends State<CapturePage> {
       _selectedTags.clear();
       _sourceUiImage = null;
       _sourceImageBytes = null;
+      _stampText = '';
+      _stampCustomOffset = null;
+      _stampPosition = StampPosition.bottomRight;
     });
   }
 
@@ -416,9 +449,35 @@ class _CapturePageState extends State<CapturePage> {
     final meta = _pendingMeta;
     if (png == null || meta == null) return;
     AppHaptics.success();
+
+    var finalBytes = png;
+    if (_stampText.trim().isNotEmpty &&
+        _lastStickerRenderedRect != null &&
+        _lastStampCenterInPreview != null &&
+        _lastStampSizeInPreview != null) {
+      final stampConfig = StampConfig(
+        text: _stampText,
+        color: _stampColor,
+        date: meta.capturedAt,
+        position: _stampPosition,
+        customOffset: _stampCustomOffset,
+      );
+      try {
+        finalBytes = await compositeStampOnImage(
+          sourcePngBytes: png,
+          config: stampConfig,
+          stickerRenderedRect: _lastStickerRenderedRect!,
+          stampCenterInPreview: _lastStampCenterInPreview!,
+          stampSizeInPreview: _lastStampSizeInPreview!,
+        );
+      } catch (_) {
+        finalBytes = png;
+      }
+    }
+
     final id = const Uuid().v4();
     final path = widget.repository.imagePathFor(id);
-    await _processor.writePng(png, path);
+    await _processor.writePng(finalBytes, path);
     final jitter = (math.Random().nextDouble() - 0.5) * 0.18;
     final sticker = Sticker(
       id: id,
@@ -440,7 +499,7 @@ class _CapturePageState extends State<CapturePage> {
     // Asynchronously generate AI model tags in the background now that the sticker is placed & saved
     unawaited(widget.repository.generateModelTags(id));
     if (!mounted) return;
-    Navigator.of(context).pop(CaptureResult(sticker: sticker, pngBytes: png));
+    Navigator.of(context).pop(CaptureResult(sticker: sticker, pngBytes: finalBytes));
   }
 
   Future<void> _retake() async {
@@ -448,14 +507,70 @@ class _CapturePageState extends State<CapturePage> {
     try {
       await _camera?.resumePreview();
     } catch (_) {}
+    _stampController.clear();
     setState(() {
       _previewPng = null;
       _pendingMeta = null;
       _selectedTags.clear();
       _sourceImageBytes = null;
+      _stampText = '';
+      _stampCustomOffset = null;
+      _stampPosition = StampPosition.bottomRight;
     });
     if (wasFromGallery) {
       await _pickGallery();
+    }
+  }
+
+  void _cycleStampPosition() {
+    AppHaptics.selection();
+    setState(() {
+      _stampCustomOffset = null;
+      switch (_stampPosition) {
+        case StampPosition.bottomRight:
+          _stampPosition = StampPosition.bottomLeft;
+          break;
+        case StampPosition.bottomLeft:
+          _stampPosition = StampPosition.topLeft;
+          break;
+        case StampPosition.topLeft:
+          _stampPosition = StampPosition.topRight;
+          break;
+        case StampPosition.topRight:
+        case StampPosition.custom:
+          _stampPosition = StampPosition.bottomRight;
+          break;
+      }
+    });
+  }
+
+  IconData _positionIcon(StampPosition pos) {
+    switch (pos) {
+      case StampPosition.bottomRight:
+        return Icons.south_east_rounded;
+      case StampPosition.bottomLeft:
+        return Icons.south_west_rounded;
+      case StampPosition.topRight:
+        return Icons.north_east_rounded;
+      case StampPosition.topLeft:
+        return Icons.north_west_rounded;
+      case StampPosition.custom:
+        return Icons.open_with_rounded;
+    }
+  }
+
+  String _positionLabel(StampPosition pos) {
+    switch (pos) {
+      case StampPosition.bottomRight:
+        return 'Bottom-Right';
+      case StampPosition.bottomLeft:
+        return 'Bottom-Left';
+      case StampPosition.topRight:
+        return 'Top-Right';
+      case StampPosition.topLeft:
+        return 'Top-Left';
+      case StampPosition.custom:
+        return 'Custom';
     }
   }
 
@@ -466,6 +581,7 @@ class _CapturePageState extends State<CapturePage> {
 
   @override
   void dispose() {
+    _stampController.dispose();
     _sourceUiImage?.dispose();
     _sourceUiImage = null;
     _camera?.dispose();
@@ -639,69 +755,203 @@ class _CapturePageState extends State<CapturePage> {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: preview != null
-                            ? Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(
-                                          MdSpacing.md,
-                                        ),
-                                        child: Image.memory(
-                                          preview,
-                                          fit: BoxFit.contain,
-                                          filterQuality:
-                                              FilterQuality.high,
-                                        ),
+                            ? LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final availW = math.max(
+                                    1.0,
+                                    constraints.maxWidth - MdSpacing.md * 2,
+                                  );
+                                  final availH = math.max(
+                                    1.0,
+                                    constraints.maxHeight - MdSpacing.md * 2,
+                                  );
+                                  final imgW = _stickerPixelWidth > 0
+                                      ? _stickerPixelWidth.toDouble()
+                                      : availW;
+                                  final imgH = _stickerPixelHeight > 0
+                                      ? _stickerPixelHeight.toDouble()
+                                      : availH;
+                                  final imgAspect = imgW / imgH;
+                                  final boxAspect = availW / availH;
+
+                                  double renderedW;
+                                  double renderedH;
+                                  if (boxAspect > imgAspect) {
+                                    renderedH = availH;
+                                    renderedW = availH * imgAspect;
+                                  } else {
+                                    renderedW = availW;
+                                    renderedH = availW / imgAspect;
+                                  }
+
+                                  final stickerLeft =
+                                      (constraints.maxWidth - renderedW) / 2;
+                                  final stickerTop =
+                                      (constraints.maxHeight - renderedH) / 2;
+                                  final stickerRect = Rect.fromLTWH(
+                                    stickerLeft,
+                                    stickerTop,
+                                    renderedW,
+                                    renderedH,
+                                  );
+                                  _lastStickerRenderedRect = stickerRect;
+
+                                  Widget? stampWidget;
+                                  if (_stampText.trim().isNotEmpty) {
+                                    final stampConfig = StampConfig(
+                                      text: _stampText,
+                                      color: _stampColor,
+                                      date: _pendingMeta?.capturedAt,
+                                      position: _stampPosition,
+                                      customOffset: _stampCustomOffset,
+                                    );
+                                    final stampSize =
+                                        StampPainter.computeStampSize(
+                                      _stampText,
+                                      date: _pendingMeta?.capturedAt,
+                                    );
+                                    _lastStampSizeInPreview = stampSize;
+
+                                    Offset stampCenter;
+                                    if (_stampPosition == StampPosition.custom &&
+                                        _stampCustomOffset != null) {
+                                      stampCenter = _stampCustomOffset!;
+                                    } else {
+                                      switch (_stampPosition) {
+                                        case StampPosition.bottomRight:
+                                          stampCenter = Offset(
+                                            stickerRect.right -
+                                                stampSize.width * 0.42,
+                                            stickerRect.bottom -
+                                                stampSize.height * 0.38,
+                                          );
+                                          break;
+                                        case StampPosition.bottomLeft:
+                                          stampCenter = Offset(
+                                            stickerRect.left +
+                                                stampSize.width * 0.42,
+                                            stickerRect.bottom -
+                                                stampSize.height * 0.38,
+                                          );
+                                          break;
+                                        case StampPosition.topRight:
+                                          stampCenter = Offset(
+                                            stickerRect.right -
+                                                stampSize.width * 0.42,
+                                            stickerRect.top +
+                                                stampSize.height * 0.38,
+                                          );
+                                          break;
+                                        case StampPosition.topLeft:
+                                          stampCenter = Offset(
+                                            stickerRect.left +
+                                                stampSize.width * 0.42,
+                                            stickerRect.top +
+                                                stampSize.height * 0.38,
+                                          );
+                                          break;
+                                        case StampPosition.custom:
+                                          stampCenter = _stampCustomOffset ??
+                                              Offset(
+                                                stickerRect.right -
+                                                    stampSize.width * 0.42,
+                                                stickerRect.bottom -
+                                                    stampSize.height * 0.38,
+                                              );
+                                          break;
+                                      }
+                                    }
+                                    _lastStampCenterInPreview = stampCenter;
+
+                                    stampWidget = Positioned(
+                                      left: stampCenter.dx - stampSize.width / 2,
+                                      top: stampCenter.dy - stampSize.height / 2,
+                                      child: StampWidget(
+                                        config: stampConfig,
+                                        onDragUpdate: (delta) {
+                                          setState(() {
+                                            final cur = _stampCustomOffset ??
+                                                stampCenter;
+                                            _stampPosition =
+                                                StampPosition.custom;
+                                            _stampCustomOffset = cur + delta;
+                                          });
+                                        },
                                       ),
-                                    ),
-                                  ),
-                                  if (_pendingMeta?.placeLabel != null)
-                                    Positioned(
-                                      bottom: MdSpacing.sm,
-                                      left: MdSpacing.sm,
-                                      right: MdSpacing.sm,
-                                      child: Center(
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: MdSpacing.sm,
-                                            vertical: MdSpacing.xxs,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: scheme
-                                                .surfaceContainerHighest
-                                                .withValues(alpha: 0.9),
-                                            borderRadius: BorderRadius.circular(
-                                              MdSpacing.radiusFull,
+                                    );
+                                  }
+
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Positioned.fill(
+                                        child: Center(
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(
+                                              MdSpacing.md,
+                                            ),
+                                            child: Image.memory(
+                                              preview,
+                                              fit: BoxFit.contain,
+                                              filterQuality:
+                                                  FilterQuality.high,
                                             ),
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.place_rounded,
-                                                size: 16,
-                                                color: scheme.primary,
+                                        ),
+                                      ),
+                                      ?stampWidget,
+                                      if (_pendingMeta?.placeLabel != null)
+                                        Positioned(
+                                          bottom: MdSpacing.sm,
+                                          left: MdSpacing.sm,
+                                          right: MdSpacing.sm,
+                                          child: Center(
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: MdSpacing.sm,
+                                                vertical: MdSpacing.xxs,
                                               ),
-                                              const SizedBox(width: 4),
-                                              Flexible(
-                                                child: Text(
-                                                  _pendingMeta!.placeLabel!,
-                                                  style: textTheme.labelSmall
-                                                      ?.copyWith(
+                                              decoration: BoxDecoration(
+                                                color: scheme
+                                                    .surfaceContainerHighest
+                                                    .withValues(alpha: 0.9),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                  MdSpacing.radiusFull,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize:
+                                                    MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.place_rounded,
+                                                    size: 16,
+                                                    color: scheme.primary,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      _pendingMeta!.placeLabel!,
+                                                      style: textTheme
+                                                          .labelSmall
+                                                          ?.copyWith(
                                                         fontWeight:
                                                             FontWeight.w600,
                                                       ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                ],
+                                    ],
+                                  );
+                                },
                               )
                             : _cameraReady && _camera != null
                             ? GestureDetector(
@@ -824,7 +1074,229 @@ class _CapturePageState extends State<CapturePage> {
                       ),
                     ),
                   ),
-                  if (preview != null)
+                  if (preview != null) ...[
+                    // Stamp Section
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        MdSpacing.sm,
+                        0,
+                        MdSpacing.sm,
+                        MdSpacing.xs,
+                      ),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: MdSpacing.sm,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerLowest,
+                          borderRadius: BorderRadius.circular(
+                            MdSpacing.radiusLg,
+                          ),
+                          border: Border.all(
+                            color: scheme.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _stampColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(
+                                      MdSpacing.radiusFull,
+                                    ),
+                                    border: Border.all(
+                                      color: _stampColor.withValues(alpha: 0.35),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.approval_rounded,
+                                        size: 16,
+                                        color: _stampColor,
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        'Stamp',
+                                        style: textTheme.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: _stampColor,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: MdSpacing.xs),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _stampController,
+                                    maxLength: 15,
+                                    textCapitalization:
+                                        TextCapitalization.characters,
+                                    style: textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.0,
+                                      fontFamily: 'monospace',
+                                    ),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      hintText: 'Type stamp (max 15 chars)…',
+                                      hintStyle: textTheme.bodySmall?.copyWith(
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.6),
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                      border: InputBorder.none,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 6,
+                                      ),
+                                      counterText: '',
+                                    ),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _stampText = val;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                if (_stampText.isNotEmpty) ...[
+                                  Text(
+                                    '${_stampText.length}/15',
+                                    style: textTheme.labelSmall?.copyWith(
+                                      color: scheme.onSurfaceVariant
+                                          .withValues(alpha: 0.65),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 16,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 26,
+                                      minHeight: 26,
+                                    ),
+                                    splashRadius: 14,
+                                    tooltip: 'Clear stamp',
+                                    onPressed: () {
+                                      M3EHapticFeedback.light.apply();
+                                      _stampController.clear();
+                                      setState(() {
+                                        _stampText = '';
+                                        _stampCustomOffset = null;
+                                      });
+                                    },
+                                  ),
+                                ],
+                                Tooltip(
+                                  message:
+                                      'Position: ${_positionLabel(_stampPosition)}',
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(
+                                      MdSpacing.radiusFull,
+                                    ),
+                                    onTap: _cycleStampPosition,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(6),
+                                      child: Icon(
+                                        _positionIcon(_stampPosition),
+                                        size: 18,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_stampText.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(
+                                  top: 4,
+                                  bottom: 2,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      'Ink:',
+                                      style: textTheme.labelSmall?.copyWith(
+                                        fontSize: 10,
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.7),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    for (final color in StampPainter.inkColors)
+                                      GestureDetector(
+                                        onTap: () {
+                                          AppHaptics.selection();
+                                          setState(() {
+                                            _stampColor = color;
+                                          });
+                                        },
+                                        child: Container(
+                                          margin: const EdgeInsets.symmetric(
+                                            horizontal: 3,
+                                          ),
+                                          width: 17,
+                                          height: 17,
+                                          decoration: BoxDecoration(
+                                            color: color,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: _stampColor == color
+                                                  ? scheme.onSurface
+                                                  : Colors.transparent,
+                                              width: 1.8,
+                                            ),
+                                            boxShadow: [
+                                              if (_stampColor == color)
+                                                BoxShadow(
+                                                  color: color.withValues(
+                                                    alpha: 0.4,
+                                                  ),
+                                                  blurRadius: 4,
+                                                  spreadRadius: 1,
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    const Spacer(),
+                                    Text(
+                                      'Drag stamp to adjust',
+                                      style: textTheme.labelSmall?.copyWith(
+                                        fontSize: 9.5,
+                                        fontStyle: FontStyle.italic,
+                                        color: scheme.onSurfaceVariant
+                                            .withValues(alpha: 0.55),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                     // User Custom Tags
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
@@ -934,6 +1406,7 @@ class _CapturePageState extends State<CapturePage> {
                         ),
                       ),
                     ),
+                  ],
                   if (!_modelReady && _status != null && _modelFailed)
                     Padding(
                       padding: const EdgeInsets.symmetric(
