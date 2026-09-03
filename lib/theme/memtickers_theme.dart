@@ -117,7 +117,45 @@ ThemeData memtickersTheme(ColorScheme scheme) {
     ),
     dividerColor: scheme.outlineVariant.withValues(alpha: 0.5),
     splashFactory: InkRipple.splashFactory,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+      },
+    ),
   );
+}
+
+/// Modern Material 3 Expressive page route transition featuring spring motion
+/// and fluid scale-fade easing.
+class ExpressivePageRoute<T> extends PageRouteBuilder<T> {
+  ExpressivePageRoute({
+    required WidgetBuilder builder,
+    super.settings,
+  }) : super(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              builder(context),
+          transitionDuration: const Duration(milliseconds: 400),
+          reverseTransitionDuration: const Duration(milliseconds: 320),
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeInOutCubicEmphasized,
+              reverseCurve: Curves.easeInCubic,
+            );
+            return FadeTransition(
+              opacity: CurvedAnimation(
+                parent: animation,
+                curve: Curves.easeOut,
+                reverseCurve: Curves.easeIn,
+              ),
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.93, end: 1.0).animate(curved),
+                child: child,
+              ),
+            );
+          },
+        );
 }
 
 TextTheme _buildExpressiveTextTheme(ColorScheme scheme) {

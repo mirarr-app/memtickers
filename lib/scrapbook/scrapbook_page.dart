@@ -11,6 +11,7 @@ import '../search/sticker_search_filter.dart';
 import '../settings/sticker_settings_sheet.dart';
 import '../tags/tags_sheet.dart';
 import '../theme/app_haptics.dart';
+import '../theme/memtickers_theme.dart';
 import '../theme/spacing.dart';
 import 'scrapbook_canvas.dart';
 
@@ -116,7 +117,7 @@ class _ScrapbookPageState extends State<ScrapbookPage>
     final size = MediaQuery.sizeOf(context);
     final drop = _dropPoint(size);
     final result = await Navigator.of(context).push<CaptureResult>(
-      MaterialPageRoute(
+      ExpressivePageRoute(
         builder: (context) => CapturePage(
           repository: widget.repository,
           dropX: drop.dx.clamp(80, kBoardSize - 240),
