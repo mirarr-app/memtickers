@@ -130,82 +130,11 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
   }
 
   Future<void> _editBoard(StickerBoard board) async {
-    final controller = TextEditingController(text: board.name);
     final count = widget.repository.getStickerCountForBoard(board.id);
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
     final newName = await showDialog<String>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: scheme.surfaceContainerHigh,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
-          ),
-          icon: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.edit_rounded,
-              color: scheme.onPrimaryContainer,
-              size: 22,
-            ),
-          ),
-          title: Text(
-            'Edit Board Name',
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            textAlign: TextAlign.center,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Rename this board ($count sticker${count == 1 ? '' : 's'}).',
-                style: textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: MdSpacing.sm),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  labelText: 'Board Name',
-                  prefixIcon: const Icon(Icons.dashboard_outlined, size: 20),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
-                  ),
-                  filled: true,
-                  fillColor: scheme.surfaceContainerLowest,
-                ),
-                onSubmitted: (value) => Navigator.pop(context, value.trim()),
-              ),
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.end,
-          actions: [
-            M3ETextButton(
-              size: M3EButtonSize.sm,
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(width: MdSpacing.xs),
-            M3EFilledButton.icon(
-              size: M3EButtonSize.sm,
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => _EditBoardDialog(board: board, count: count),
     );
 
     if (newName != null && newName.isNotEmpty && newName != board.name) {
@@ -696,6 +625,109 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
           ),
         );
       },
+    );
+  }
+}
+
+class _EditBoardDialog extends StatefulWidget {
+  const _EditBoardDialog({
+    required this.board,
+    required this.count,
+  });
+
+  final StickerBoard board;
+  final int count;
+
+  @override
+  State<_EditBoardDialog> createState() => _EditBoardDialogState();
+}
+
+class _EditBoardDialogState extends State<_EditBoardDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.board.name);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return AlertDialog(
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
+      ),
+      icon: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.edit_rounded,
+          color: scheme.onPrimaryContainer,
+          size: 22,
+        ),
+      ),
+      title: Text(
+        'Edit Board Name',
+        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rename this board (${widget.count} sticker${widget.count == 1 ? "" : "s"}).',
+            style: textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: MdSpacing.sm),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Board Name',
+              prefixIcon: const Icon(Icons.dashboard_outlined, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+              ),
+              filled: true,
+              fillColor: scheme.surfaceContainerLowest,
+            ),
+            onSubmitted: (value) => Navigator.pop(context, value.trim()),
+          ),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.end,
+      actions: [
+        M3ETextButton(
+          size: M3EButtonSize.sm,
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        const SizedBox(width: MdSpacing.xs),
+        M3EFilledButton.icon(
+          size: M3EButtonSize.sm,
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          icon: const Icon(Icons.check_rounded, size: 18),
+          label: const Text('Save'),
+        ),
+      ],
     );
   }
 }

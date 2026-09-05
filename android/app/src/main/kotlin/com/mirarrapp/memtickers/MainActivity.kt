@@ -5,6 +5,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -125,6 +126,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        mainScope.cancel()
         IsnetSegmenter.close()
         AutoTagger.close()
         super.onDestroy()

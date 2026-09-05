@@ -112,6 +112,9 @@ class StampPainter extends CustomPainter {
     const wavyWidth = 46.0;
     const wavyGap = 7.0;
 
+    headerPainter.dispose();
+    mainPainter.dispose();
+
     return Size(boxWidth + wavyGap + wavyWidth, boxHeight);
   }
 
@@ -309,6 +312,9 @@ class StampPainter extends CustomPainter {
     canvas.drawCircle(Offset(boxWidth * 0.15, boxHeight * 0.92), 0.7, specklePaint);
     canvas.drawCircle(Offset(boxWidth * 0.82, boxHeight * 0.12), 0.6, specklePaint);
     canvas.drawCircle(Offset(waveStartX + 12, boxHeight * 0.38), 0.5, specklePaint);
+
+    headerPainter.dispose();
+    mainPainter.dispose();
   }
 
   @override
@@ -439,6 +445,7 @@ Future<Uint8List> compositeStampOnImage({
 
   final picture = recorder.endRecording();
   final outImage = await picture.toImage(outW, outH);
+  picture.dispose();
   final byteData = await outImage.toByteData(format: ui.ImageByteFormat.png);
 
   srcImage.dispose();

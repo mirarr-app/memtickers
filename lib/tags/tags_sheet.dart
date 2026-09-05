@@ -110,84 +110,11 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
   }
 
   Future<void> _editTag(StickerTag tag) async {
-    final controller = TextEditingController(text: tag.name);
     final count = widget.repository.getStickerCountForTag(tag.name);
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
 
     final newName = await showDialog<String>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: scheme.surfaceContainerHigh,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
-          ),
-          icon: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.edit_rounded,
-              color: scheme.onPrimaryContainer,
-              size: 22,
-            ),
-          ),
-          title: Text(
-            'Edit Tag',
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            textAlign: TextAlign.center,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                count > 0
-                    ? 'Renaming this tag will update $count sticker(s).'
-                    : 'Enter the new name for this tag.',
-                style: textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: MdSpacing.sm),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  labelText: 'Tag Name',
-                  prefixIcon: const Icon(Icons.label_outline_rounded, size: 20),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
-                  ),
-                  filled: true,
-                  fillColor: scheme.surfaceContainerLowest,
-                ),
-                onSubmitted: (value) => Navigator.pop(context, value.trim()),
-              ),
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.end,
-          actions: [
-            M3ETextButton(
-              size: M3EButtonSize.sm,
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            const SizedBox(width: MdSpacing.xs),
-            M3EFilledButton.icon(
-              size: M3EButtonSize.sm,
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('Save'),
-            ),
-          ],
-        );
-      },
+      builder: (context) => _EditTagDialog(tag: tag, count: count),
     );
 
     if (newName != null && newName.isNotEmpty && newName != tag.name) {
@@ -573,6 +500,111 @@ class _TagsSheetBodyState extends State<_TagsSheetBody> {
           ),
         );
       },
+    );
+  }
+}
+
+class _EditTagDialog extends StatefulWidget {
+  const _EditTagDialog({
+    required this.tag,
+    required this.count,
+  });
+
+  final StickerTag tag;
+  final int count;
+
+  @override
+  State<_EditTagDialog> createState() => _EditTagDialogState();
+}
+
+class _EditTagDialogState extends State<_EditTagDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.tag.name);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return AlertDialog(
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(MdSpacing.radiusXl),
+      ),
+      icon: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.edit_rounded,
+          color: scheme.onPrimaryContainer,
+          size: 22,
+        ),
+      ),
+      title: Text(
+        'Edit Tag',
+        style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.count > 0
+                ? 'Renaming this tag will update ${widget.count} sticker(s).'
+                : 'Enter the new name for this tag.',
+            style: textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: MdSpacing.sm),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: 'Tag Name',
+              prefixIcon: const Icon(Icons.label_outline_rounded, size: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+              ),
+              filled: true,
+              fillColor: scheme.surfaceContainerLowest,
+            ),
+            onSubmitted: (value) => Navigator.pop(context, value.trim()),
+          ),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.end,
+      actions: [
+        M3ETextButton(
+          size: M3EButtonSize.sm,
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        const SizedBox(width: MdSpacing.xs),
+        M3EFilledButton.icon(
+          size: M3EButtonSize.sm,
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          icon: const Icon(Icons.check_rounded, size: 18),
+          label: const Text('Save'),
+        ),
+      ],
     );
   }
 }

@@ -45,11 +45,14 @@ class MetadataService {
     double? lng;
     try {
       final exif = await Exif.fromPath(path);
-      capturedAt = await exif.getOriginalDate() ?? capturedAt;
-      final gps = await exif.getLatLong();
-      lat = gps?.latitude;
-      lng = gps?.longitude;
-      await exif.close();
+      try {
+        capturedAt = await exif.getOriginalDate() ?? capturedAt;
+        final gps = await exif.getLatLong();
+        lat = gps?.latitude;
+        lng = gps?.longitude;
+      } finally {
+        await exif.close();
+      }
     } catch (_) {
       // Missing EXIF is fine.
     }

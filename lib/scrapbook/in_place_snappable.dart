@@ -42,7 +42,7 @@ class InPlaceSnappable extends StatefulWidget {
 
 class _InPlaceSnappableState extends State<InPlaceSnappable> {
   static ui.FragmentProgram? _cachedProgram;
-  static bool _isLoadingProgram = false;
+  static Future<ui.FragmentProgram?>? _programFuture;
 
   final GlobalKey _boundaryKey = GlobalKey();
   ui.FragmentShader? _shader;
@@ -82,32 +82,24 @@ class _InPlaceSnappableState extends State<InPlaceSnappable> {
       return;
     }
 
-    if (_isLoadingProgram) {
-      while (_isLoadingProgram && _cachedProgram == null) {
-        await Future<void>.delayed(const Duration(milliseconds: 16));
+    _programFuture ??= () async {
+      try {
+        final program =
+            await ui.FragmentProgram.fromAsset(InPlaceSnappable.shaderAsset);
+        _cachedProgram = program;
+        return program;
+      } catch (e) {
+        debugPrint('Note: Fragment shader not available in current runtime ($e)');
+        _programFuture = null;
+        return null;
       }
-      if (mounted && _cachedProgram != null) {
-        setState(() {
-          _shader = _cachedProgram!.fragmentShader();
-        });
-      }
-      return;
-    }
+    }();
 
-    _isLoadingProgram = true;
-    try {
-      final program =
-          await ui.FragmentProgram.fromAsset(InPlaceSnappable.shaderAsset);
-      _cachedProgram = program;
-      if (mounted) {
-        setState(() {
-          _shader = program.fragmentShader();
-        });
-      }
-    } catch (e) {
-      debugPrint('Note: Fragment shader not available in current runtime ($e)');
-    } finally {
-      _isLoadingProgram = false;
+    final program = await _programFuture;
+    if (mounted && program != null) {
+      setState(() {
+        _shader = program.fragmentShader();
+      });
     }
   }
 
