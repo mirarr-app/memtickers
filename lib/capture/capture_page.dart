@@ -1068,6 +1068,26 @@ class _CapturePageState extends State<CapturePage>
 
   Widget _buildCameraContent(ColorScheme scheme, TextTheme textTheme) {
     if (_cameraReady && _camera != null) {
+      final camera = _camera!;
+      final previewSize = camera.value.previewSize;
+      final isPortrait =
+          MediaQuery.orientationOf(context) == Orientation.portrait;
+      final double previewWidth;
+      final double previewHeight;
+      if (previewSize != null &&
+          previewSize.width > 0 &&
+          previewSize.height > 0) {
+        previewWidth = isPortrait ? previewSize.height : previewSize.width;
+        previewHeight = isPortrait ? previewSize.width : previewSize.height;
+      } else {
+        final rawAspect = camera.value.aspectRatio;
+        final aspect = (rawAspect > 0 && rawAspect.isFinite)
+            ? (isPortrait ? (1 / rawAspect) : rawAspect)
+            : (isPortrait ? (3.0 / 4.0) : (4.0 / 3.0));
+        previewWidth = 100.0;
+        previewHeight = 100.0 / aspect;
+      }
+
       return GestureDetector(
         key: const ValueKey('camera_viewport'),
         behavior: HitTestBehavior.opaque,
@@ -1076,7 +1096,15 @@ class _CapturePageState extends State<CapturePage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            CameraPreview(_camera!),
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: previewWidth,
+                height: previewHeight,
+                child: CameraPreview(camera),
+              ),
+            ),
             // Subtle framing corners
             IgnorePointer(
               child: Container(

@@ -375,8 +375,6 @@ class _StickerImage extends StatelessWidget {
       file,
       width: width,
       height: width,
-      cacheWidth: (width * 2).round(),
-      cacheHeight: (width * 2).round(),
       fit: BoxFit.contain,
       filterQuality: filterQuality,
       color: color,
