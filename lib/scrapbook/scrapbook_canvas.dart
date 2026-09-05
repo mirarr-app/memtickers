@@ -257,6 +257,12 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                                   if (_pointers == 0) _activeId = null;
                                 });
                               },
+                              onPointerCancel: (_) {
+                                setState(() {
+                                  _pointers = (_pointers - 1).clamp(0, 8);
+                                  if (_pointers == 0) _activeId = null;
+                                });
+                              },
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onScaleStart: (details) {

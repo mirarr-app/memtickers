@@ -107,7 +107,21 @@ object IsnetSegmenter {
         val session = ortSession ?: throw IllegalStateException("ONNX session is not initialized.")
         val input = inputName ?: throw IllegalStateException("ONNX input name is null.")
 
-        val origBitmap = BitmapFactory.decodeFile(imagePath)
+        val boundsOptions = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeFile(imagePath, boundsOptions)
+
+        val rawWidth = boundsOptions.outWidth
+        val rawHeight = boundsOptions.outHeight
+        if (rawWidth <= 0 || rawHeight <= 0) {
+            throw IllegalArgumentException("Could not decode image bounds at $imagePath")
+        }
+
+        val decodeOptions = BitmapFactory.Options().apply {
+            inSampleSize = computeSampleSize(rawWidth, rawHeight, MAX_SOURCE_EDGE)
+        }
+        val origBitmap = BitmapFactory.decodeFile(imagePath, decodeOptions)
             ?: throw IllegalArgumentException("Could not decode image at $imagePath")
 
         // 1. Correct orientation using EXIF
@@ -314,6 +328,16 @@ object IsnetSegmenter {
         } catch (_: Exception) {
             bitmap
         }
+    }
+
+    private fun computeSampleSize(rawWidth: Int, rawHeight: Int, maxTargetEdge: Int): Int {
+        var sampleSize = 1
+        var longest = max(rawWidth, rawHeight)
+        while (longest / 2 >= maxTargetEdge) {
+            sampleSize *= 2
+            longest /= 2
+        }
+        return sampleSize
     }
 
     private fun limitMaxEdge(bitmap: Bitmap, maxEdge: Int): Bitmap {
