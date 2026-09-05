@@ -54,6 +54,32 @@ void main() {
       expect(updated.isNavigationMode, true);
       expect(updated.createdAt, board.createdAt);
     });
+
+    test('equality and hashCode', () {
+      final now = DateTime(2026, 1, 1);
+      final b1 = StickerBoard(
+        id: 'b-1',
+        name: 'Board',
+        createdAt: now,
+        isNavigationMode: false,
+      );
+      final b2 = StickerBoard(
+        id: 'b-1',
+        name: 'Board',
+        createdAt: now,
+        isNavigationMode: false,
+      );
+      final b3 = StickerBoard(
+        id: 'b-2',
+        name: 'Board',
+        createdAt: now,
+        isNavigationMode: false,
+      );
+
+      expect(b1, equals(b2));
+      expect(b1.hashCode, equals(b2.hashCode));
+      expect(b1, isNot(equals(b3)));
+    });
   });
 
   group('Sticker model with boardId', () {
@@ -106,6 +132,108 @@ void main() {
       );
       final updated = sticker.copyWith(boardId: 'vacation-board');
       expect(updated.boardId, 'vacation-board');
+    });
+
+    test('equality and hashCode', () {
+      final now = DateTime(2026, 1, 1);
+      final s1 = Sticker(
+        id: 's1',
+        boardId: 'b1',
+        imagePath: '/path/1.png',
+        createdAt: now,
+        x: 10,
+        y: 20,
+        rotation: 0.1,
+        scale: 1.2,
+        zIndex: 1,
+        tags: const ['tagA'],
+        modelTags: const ['mtagA'],
+      );
+      final s2 = Sticker(
+        id: 's1',
+        boardId: 'b1',
+        imagePath: '/path/1.png',
+        createdAt: now,
+        x: 10,
+        y: 20,
+        rotation: 0.1,
+        scale: 1.2,
+        zIndex: 1,
+        tags: const ['tagA'],
+        modelTags: const ['mtagA'],
+      );
+      final s3 = s1.copyWith(scale: 1.5);
+
+      expect(s1, equals(s2));
+      expect(s1.hashCode, equals(s2.hashCode));
+      expect(s1, isNot(equals(s3)));
+    });
+  });
+
+  group('StickerRepository deleteBoard', () {
+    test('throws StateError when attempting to delete the only board', () async {
+      final repo = StickerRepository();
+      final board = StickerBoard(
+        id: 'b-only',
+        name: 'Only Board',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      repo.populateForTesting(boards: [board], activeBoardId: 'b-only');
+
+      expect(() => repo.deleteBoard('b-only'), throwsStateError);
+    });
+
+    test('deletes board and its stickers, switching activeBoardId', () async {
+      final repo = StickerRepository();
+      final board1 = StickerBoard(
+        id: 'b-1',
+        name: 'Board 1',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final board2 = StickerBoard(
+        id: 'b-2',
+        name: 'Board 2',
+        createdAt: DateTime(2026, 1, 2),
+      );
+      final s1 = Sticker(
+        id: 's-1',
+        boardId: 'b-1',
+        imagePath: '/path/1.png',
+        createdAt: DateTime(2026, 1, 1),
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1,
+        zIndex: 0,
+      );
+      final s2 = Sticker(
+        id: 's-2',
+        boardId: 'b-2',
+        imagePath: '/path/2.png',
+        createdAt: DateTime(2026, 1, 2),
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1,
+        zIndex: 0,
+      );
+
+      repo.populateForTesting(
+        boards: [board1, board2],
+        stickers: [s1, s2],
+        activeBoardId: 'b-1',
+      );
+
+      expect(repo.boards.length, 2);
+      expect(repo.allStickers.length, 2);
+
+      await repo.deleteBoard('b-1');
+
+      expect(repo.boards.length, 1);
+      expect(repo.boards.first.id, 'b-2');
+      expect(repo.activeBoardId, 'b-2');
+      expect(repo.allStickers.length, 1);
+      expect(repo.allStickers.first.id, 's-2');
     });
   });
 

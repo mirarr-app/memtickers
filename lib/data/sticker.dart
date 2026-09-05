@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class Sticker {
   const Sticker({
     required this.id,
@@ -104,4 +106,42 @@ class Sticker {
       modelTags: modelTags,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Sticker &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          boardId == other.boardId &&
+          imagePath == other.imagePath &&
+          createdAt == other.createdAt &&
+          latitude == other.latitude &&
+          longitude == other.longitude &&
+          placeLabel == other.placeLabel &&
+          x == other.x &&
+          y == other.y &&
+          rotation == other.rotation &&
+          scale == other.scale &&
+          zIndex == other.zIndex &&
+          listEquals(tags, other.tags) &&
+          listEquals(modelTags, other.modelTags);
+
+  @override
+  int get hashCode => Object.hash(
+        id,
+        boardId,
+        imagePath,
+        createdAt,
+        latitude,
+        longitude,
+        placeLabel,
+        x,
+        y,
+        rotation,
+        scale,
+        zIndex,
+        Object.hashAll(tags),
+        Object.hashAll(modelTags),
+      );
 }

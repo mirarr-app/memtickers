@@ -41,4 +41,17 @@ class StickerBoard {
       isNavigationMode: (map['isNavigationMode'] as int? ?? 0) == 1,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StickerBoard &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          createdAt == other.createdAt &&
+          isNavigationMode == other.isNavigationMode;
+
+  @override
+  int get hashCode => Object.hash(id, name, createdAt, isNavigationMode);
 }
