@@ -10,11 +10,65 @@ class StickerProcessor {
   static const int borderRadius = 10;
   static const int maxEdge = 1280;
 
-  Future<Uint8List> dieCut(Uint8List sourceBytes) {
-    return compute(StickerProcessor.dieCutSync, sourceBytes);
+  // Precomputed 23x23 distance/coverage kernel table for border radius (borderRadius + 1 = 11 radius limit)
+  static final Float64List _coverageKernel = _buildCoverageKernel();
+
+  static Float64List _buildCoverageKernel() {
+    const borderLimit = borderRadius + 1; // 11
+    const kernelSize = borderLimit * 2 + 1; // 23
+    const maxDist = borderRadius + 0.5; // 10.5
+    const maxDist2 = (maxDist + 1.0) * (maxDist + 1.0);
+    final table = Float64List(kernelSize * kernelSize);
+
+    for (var dy = -borderLimit; dy <= borderLimit; dy++) {
+      final ky = dy + borderLimit;
+      for (var dx = -borderLimit; dx <= borderLimit; dx++) {
+        final kx = dx + borderLimit;
+        final d2 = (dx * dx + dy * dy).toDouble();
+        if (d2 <= maxDist2) {
+          final dist = math.sqrt(d2);
+          final coverage = (maxDist - dist).clamp(0.0, 1.0);
+          if (coverage > 0) {
+            table[ky * kernelSize + kx] = coverage;
+          }
+        }
+      }
+    }
+    return table;
   }
 
-  static Uint8List dieCutSync(Uint8List sourceBytes) {
+  Future<Uint8List> dieCut(
+    Uint8List sourceBytes, {
+    double saturation = 1.0,
+    double brightness = 1.0,
+  }) {
+    if ((saturation - 1.0).abs() < 0.001 && (brightness - 1.0).abs() < 0.001) {
+      return compute(StickerProcessor.dieCutSync, sourceBytes);
+    }
+    return compute(StickerProcessor.dieCutSync, (
+      bytes: sourceBytes,
+      saturation: saturation,
+      brightness: brightness,
+    ));
+  }
+
+  static Uint8List dieCutSync(dynamic input) {
+    final Uint8List sourceBytes;
+    final double saturation;
+    final double brightness;
+
+    if (input is Uint8List) {
+      sourceBytes = input;
+      saturation = 1.0;
+      brightness = 1.0;
+    } else if (input is ({Uint8List bytes, double saturation, double brightness})) {
+      sourceBytes = input.bytes;
+      saturation = input.saturation;
+      brightness = input.brightness;
+    } else {
+      throw ArgumentError('Unsupported input type: ${input.runtimeType}');
+    }
+
     final decoded = img.decodeImage(sourceBytes);
     if (decoded == null) {
       throw const FormatException('Could not decode segmented image.');
@@ -41,9 +95,9 @@ class StickerProcessor {
     const creamG = 245;
     const creamB = 235;
 
-    final maxDist = borderRadius + 0.5;
-    final maxDist2 = (maxDist + 1.0) * (maxDist + 1.0);
-    final borderLimit = borderRadius + 1;
+    const borderLimit = borderRadius + 1;
+    const kernelSize = 23;
+    final coverageKernel = _coverageKernel;
 
     // Buffer to track sub-pixel anti-aliased alpha for vinyl backing
     final backingAlpha = Uint8List(out.width * out.height);
@@ -53,21 +107,22 @@ class StickerProcessor {
         final pixel = src.getPixel(x, y);
         if (pixel.a < 32) continue;
         final srcA = pixel.a / 255.0;
+
         for (var dy = -borderLimit; dy <= borderLimit; dy++) {
+          final oy = y + pad + dy;
+          if (oy < 0 || oy >= out.height) continue;
+          final outRow = oy * out.width;
+          final kRow = (dy + borderLimit) * kernelSize;
+
           for (var dx = -borderLimit; dx <= borderLimit; dx++) {
-            final d2 = (dx * dx + dy * dy).toDouble();
-            if (d2 > maxDist2) continue;
-            final dist = math.sqrt(d2);
-            final coverage = (maxDist - dist).clamp(0.0, 1.0);
+            final coverage = coverageKernel[kRow + (dx + borderLimit)];
             if (coverage <= 0) continue;
 
             final ox = x + pad + dx;
-            final oy = y + pad + dy;
-            if (ox < 0 || oy < 0 || ox >= out.width || oy >= out.height) {
-              continue;
-            }
+            if (ox < 0 || ox >= out.width) continue;
+
             final a = (coverage * srcA * 255).round().clamp(0, 255);
-            final idx = oy * out.width + ox;
+            final idx = outRow + ox;
             if (a > backingAlpha[idx]) {
               backingAlpha[idx] = a;
             }
@@ -122,15 +177,49 @@ class StickerProcessor {
       }
     }
 
-    return Uint8List.fromList(img.encodePng(out));
+    var finalImage = out;
+    if ((saturation - 1.0).abs() >= 0.001 || (brightness - 1.0).abs() >= 0.001) {
+      finalImage = applyColorAdjustmentsToImage(
+        out,
+        saturation: saturation,
+        brightness: brightness,
+      );
+    }
+
+    return Uint8List.fromList(img.encodePng(finalImage));
   }
 
-  /// Applies saturation and brightness adjustments to a PNG sticker image.
-  Future<Uint8List> applyColorAdjustments(
-    Uint8List sourceBytes, {
+  /// Applies saturation and brightness adjustments directly to an [img.Image] in memory.
+  static img.Image applyColorAdjustmentsToImage(
+    img.Image image, {
     required double saturation,
     required double brightness,
   }) {
+    if ((saturation - 1.0).abs() < 0.001 && (brightness - 1.0).abs() < 0.001) {
+      return image;
+    }
+    return img.adjustColor(
+      image,
+      saturation: saturation,
+      brightness: brightness,
+    );
+  }
+
+  /// Applies saturation and brightness adjustments to a PNG sticker image or decoded image.
+  Future<Uint8List> applyColorAdjustments(
+    dynamic source, {
+    required double saturation,
+    required double brightness,
+  }) {
+    if (source is img.Image) {
+      final adjusted = applyColorAdjustmentsToImage(
+        source,
+        saturation: saturation,
+        brightness: brightness,
+      );
+      return Future.value(Uint8List.fromList(img.encodePng(adjusted)));
+    }
+    final sourceBytes = source as Uint8List;
     if ((saturation - 1.0).abs() < 0.001 && (brightness - 1.0).abs() < 0.001) {
       return Future.value(sourceBytes);
     }
@@ -148,7 +237,7 @@ class StickerProcessor {
     if (decoded == null) {
       return args.bytes;
     }
-    final adjusted = img.adjustColor(
+    final adjusted = applyColorAdjustmentsToImage(
       decoded,
       saturation: args.saturation,
       brightness: args.brightness,

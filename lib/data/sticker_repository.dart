@@ -666,7 +666,25 @@ class StickerRepository extends ChangeNotifier {
     }
   }
 
+  /// Updates the sticker transform in-memory without hitting SQLite disk or notifying full-app listeners.
+  void updateTransformInMemory(Sticker sticker, {bool notify = false}) {
+    final index = _stickers.indexWhere((s) => s.id == sticker.id);
+    if (index >= 0) {
+      _stickers[index] = _stickers[index].copyWith(
+        x: sticker.x,
+        y: sticker.y,
+        rotation: sticker.rotation,
+        scale: sticker.scale,
+        zIndex: sticker.zIndex,
+      );
+      if (notify) {
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> updateTransform(Sticker sticker) async {
+    updateTransformInMemory(sticker, notify: true);
     if (!_isTestMode) {
       try {
         final db = await StickerDatabase.instance();
@@ -684,18 +702,9 @@ class StickerRepository extends ChangeNotifier {
         );
       } catch (_) {}
     }
-    final index = _stickers.indexWhere((s) => s.id == sticker.id);
-    if (index >= 0) {
-      _stickers[index] = _stickers[index].copyWith(
-        x: sticker.x,
-        y: sticker.y,
-        rotation: sticker.rotation,
-        scale: sticker.scale,
-        zIndex: sticker.zIndex,
-      );
-      notifyListeners();
-    }
   }
+
+  Future<void> persistTransform(Sticker sticker) => updateTransform(sticker);
 
   Future<void> delete(String id) async {
     final existing = _stickers.where((s) => s.id == id).firstOrNull;
