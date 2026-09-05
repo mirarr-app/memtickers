@@ -1,11 +1,32 @@
-import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 import '../data/sticker.dart';
 import '../theme/app_haptics.dart';
 import 'in_place_snappable.dart';
+
+/// Scope providing shared accelerometer tilt state to stickers on the canvas.
+class StickerTiltScope extends InheritedWidget {
+  const StickerTiltScope({
+    super.key,
+    required this.tiltNotifier,
+    required super.child,
+  });
+
+  final ValueListenable<Offset> tiltNotifier;
+
+  static ValueListenable<Offset>? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<StickerTiltScope>()
+        ?.tiltNotifier;
+  }
+
+  @override
+  bool updateShouldNotify(covariant StickerTiltScope oldWidget) {
+    return tiltNotifier != oldWidget.tiltNotifier;
+  }
+}
 
 class StickerObject extends StatefulWidget {
   const StickerObject({
@@ -14,6 +35,7 @@ class StickerObject extends StatefulWidget {
     required this.selected,
     required this.dropping,
     this.snapping = false,
+    this.tiltNotifier,
     required this.onTap,
     required this.onLongPress,
   });
@@ -22,6 +44,7 @@ class StickerObject extends StatefulWidget {
   final bool selected;
   final bool dropping;
   final bool snapping;
+  final ValueListenable<Offset>? tiltNotifier;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -33,9 +56,6 @@ class _StickerObjectState extends State<StickerObject>
     with TickerProviderStateMixin {
   late final AnimationController _stickController;
   late final AnimationController _snapController;
-  StreamSubscription<AccelerometerEvent>? _tilt;
-  double _tiltX = 0;
-  double _tiltY = 0;
   bool _impactHapticFired = false;
 
   @override
@@ -71,14 +91,6 @@ class _StickerObjectState extends State<StickerObject>
         }
       });
     }
-
-    _tilt = accelerometerEventStream().listen((event) {
-      if (!mounted) return;
-      setState(() {
-        _tiltX = (event.y * 0.035).clamp(-0.18, 0.18);
-        _tiltY = (-event.x * 0.035).clamp(-0.18, 0.18);
-      });
-    });
   }
 
   @override
@@ -100,7 +112,6 @@ class _StickerObjectState extends State<StickerObject>
 
   @override
   void dispose() {
-    _tilt?.cancel();
     _stickController.dispose();
     _snapController.dispose();
     super.dispose();
@@ -111,6 +122,8 @@ class _StickerObjectState extends State<StickerObject>
     final file = File(widget.sticker.imagePath);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final effectiveTiltNotifier =
+        widget.tiltNotifier ?? StickerTiltScope.maybeOf(context);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -129,158 +142,161 @@ class _StickerObjectState extends State<StickerObject>
         particleSpeed: 1.1,
         relativeParticleSize: 0.015,
         child: AnimatedBuilder(
-          animation: _stickController,
+          animation: effectiveTiltNotifier != null
+              ? Listenable.merge([_stickController, effectiveTiltNotifier])
+              : _stickController,
           builder: (context, child) {
             final t = _stickController.value;
             final isAnimating = _stickController.isAnimating || t < 1.0;
+            final tilt = effectiveTiltNotifier?.value ?? Offset.zero;
+            final tiltX = tilt.dx;
+            final tiltY = tilt.dy;
 
-        // 1. Scale & Squash-and-Stretch calculation
-        double scaleX = 1.0;
-        double scaleY = 1.0;
-        if (isAnimating) {
-          if (t <= 0.50) {
-            // Swooping down and accelerating from lifted floating scale to board
-            final p = Curves.easeInCubic.transform(t / 0.50);
-            final s = 1.34 - (1.34 - 0.94) * p;
-            scaleX = s;
-            scaleY = s;
-          } else if (t <= 0.72) {
-            // Impact squash & spring rebound
-            final p = Curves.easeOutBack.transform((t - 0.50) / 0.22);
-            scaleX = 0.94 + (1.05 - 0.94) * p;
-            scaleY = 0.94 + (1.03 - 0.94) * p;
-          } else if (t <= 0.88) {
-            // Secondary rebound
-            final p = Curves.easeInOut.transform((t - 0.72) / 0.16);
-            scaleX = 1.05 - (1.05 - 0.99) * p;
-            scaleY = 1.03 - (1.03 - 0.99) * p;
-          } else {
-            // Settle to resting scale
-            final p = Curves.easeOut.transform((t - 0.88) / 0.12);
-            scaleX = 0.99 + (1.0 - 0.99) * p;
-            scaleY = 0.99 + (1.0 - 0.99) * p;
-          }
-        }
+            // 1. Scale & Squash-and-Stretch calculation
+            double scaleX = 1.0;
+            double scaleY = 1.0;
+            if (isAnimating) {
+              if (t <= 0.50) {
+                // Swooping down and accelerating from lifted floating scale to board
+                final p = Curves.easeInCubic.transform(t / 0.50);
+                final s = 1.34 - (1.34 - 0.94) * p;
+                scaleX = s;
+                scaleY = s;
+              } else if (t <= 0.72) {
+                // Impact squash & spring rebound
+                final p = Curves.easeOutBack.transform((t - 0.50) / 0.22);
+                scaleX = 0.94 + (1.05 - 0.94) * p;
+                scaleY = 0.94 + (1.03 - 0.94) * p;
+              } else if (t <= 0.88) {
+                // Secondary rebound
+                final p = Curves.easeInOut.transform((t - 0.72) / 0.16);
+                scaleX = 1.05 - (1.05 - 0.99) * p;
+                scaleY = 1.03 - (1.03 - 0.99) * p;
+              } else {
+                // Settle to resting scale
+                final p = Curves.easeOut.transform((t - 0.88) / 0.12);
+                scaleX = 0.99 + (1.0 - 0.99) * p;
+                scaleY = 0.99 + (1.0 - 0.99) * p;
+              }
+            }
 
-        // 2. 3D Peel Roll / Angle calculation
-        double rotX = _tiltX;
-        double rotY = _tiltY;
-        double rotZ = 0.0;
-        if (isAnimating && t < 0.54) {
-          final p = Curves.easeInQuad.transform((t / 0.54).clamp(0.0, 1.0));
-          final lift = 1.0 - p;
-          rotX = lift * 0.38 + _tiltX;
-          rotY = lift * -0.28 + _tiltY;
-          rotZ = lift * 0.08;
-        }
+            // 2. 3D Peel Roll / Angle calculation
+            double rotX = tiltX;
+            double rotY = tiltY;
+            double rotZ = 0.0;
+            if (isAnimating && t < 0.54) {
+              final p = Curves.easeInQuad.transform((t / 0.54).clamp(0.0, 1.0));
+              final lift = 1.0 - p;
+              rotX = lift * 0.38 + tiltX;
+              rotY = lift * -0.28 + tiltY;
+              rotZ = lift * 0.08;
+            }
 
-        // 3. Dynamic Shadow Transition
-        Offset shadowOffset = const Offset(3, 5);
-        double shadowScale = 1.0;
-        double shadowAlpha = 0.32;
-        if (isAnimating && t < 0.50) {
-          final p = Curves.easeInCubic.transform(t / 0.50);
-          shadowOffset = Offset.lerp(const Offset(16, 28), const Offset(3, 5), p)!;
-          shadowScale = 1.22 - 0.22 * p;
-          shadowAlpha = 0.16 + 0.16 * p;
-        }
+            // 3. Dynamic Shadow Transition
+            Offset shadowOffset = const Offset(3, 5);
+            double shadowScale = 1.0;
+            double shadowAlpha = 0.32;
+            if (isAnimating && t < 0.50) {
+              final p = Curves.easeInCubic.transform(t / 0.50);
+              shadowOffset =
+                  Offset.lerp(const Offset(16, 28), const Offset(3, 5), p)!;
+              shadowScale = 1.22 - 0.22 * p;
+              shadowAlpha = 0.16 + 0.16 * p;
+            }
 
-        // 4. Gloss Sheen Sweep (Active between 0.44 and 0.94)
-        double sheenProgress = -1.0;
-        if (isAnimating && t >= 0.44 && t <= 0.94) {
-          sheenProgress = (t - 0.44) / 0.50;
-        }
+            // 4. Gloss Sheen Sweep (Active between 0.44 and 0.94)
+            double sheenProgress = -1.0;
+            if (isAnimating && t >= 0.44 && t <= 0.94) {
+              sheenProgress = (t - 0.44) / 0.50;
+            }
 
-        // 5. Adhesive Impact Shockwave Burst (Active between 0.50 and 1.0)
-        double impactProgress = -1.0;
-        if (isAnimating && t >= 0.50) {
-          impactProgress = (t - 0.50) / 0.50;
-        }
+            // 5. Adhesive Impact Shockwave Burst (Active between 0.50 and 1.0)
+            double impactProgress = -1.0;
+            if (isAnimating && t >= 0.50) {
+              impactProgress = (t - 0.50) / 0.50;
+            }
 
-        Widget imageWidget = _StickerImage(file: file, width: 168);
-        if (sheenProgress >= 0.0) {
-          imageWidget = ShaderMask(
-            shaderCallback: (bounds) {
-              final sweepPos = -2.5 + sheenProgress * 5.0;
-              return LinearGradient(
-                begin: Alignment(sweepPos - 0.7, sweepPos - 0.7),
-                end: Alignment(sweepPos + 0.7, sweepPos + 0.7),
-                colors: [
-                  Colors.white.withValues(alpha: 0.0),
-                  Colors.white.withValues(alpha: 0.25),
-                  Colors.white.withValues(alpha: 0.85),
-                  Colors.white.withValues(alpha: 0.25),
-                  Colors.white.withValues(alpha: 0.0),
-                ],
-                stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
-              ).createShader(bounds);
-            },
-            blendMode: BlendMode.srcATop,
-            child: imageWidget,
-          );
-        }
+            Widget imageWidget = _StickerImage(file: file, width: 168);
+            if (sheenProgress >= 0.0) {
+              imageWidget = ShaderMask(
+                shaderCallback: (bounds) {
+                  final sweepPos = -2.5 + sheenProgress * 5.0;
+                  return LinearGradient(
+                    begin: Alignment(sweepPos - 0.7, sweepPos - 0.7),
+                    end: Alignment(sweepPos + 0.7, sweepPos + 0.7),
+                    colors: [
+                      Colors.white.withValues(alpha: 0.0),
+                      Colors.white.withValues(alpha: 0.25),
+                      Colors.white.withValues(alpha: 0.85),
+                      Colors.white.withValues(alpha: 0.25),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 0.35, 0.5, 0.65, 1.0],
+                  ).createShader(bounds);
+                },
+                blendMode: BlendMode.srcATop,
+                child: imageWidget,
+              );
+            }
 
-        return Transform(
-          alignment: Alignment.center,
-          transform: Matrix4.identity()
-            ..setEntry(3, 2, 0.0018)
-            ..rotateX(rotX)
-              ..rotateY(rotY)
-              ..rotateZ(rotZ),
-            child: Transform(
+            return Transform(
               alignment: Alignment.center,
-              transform: Matrix4.identity()..scaleByDouble(scaleX, scaleY, 1.0, 1.0),
-              child: Semantics(
-                button: true,
-                label: 'Memory sticker',
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    // Adhesive impact ring & sparkle particles
-                    if (impactProgress >= 0.0)
-                      Positioned.fill(
-                        child: CustomPaint(
-                          painter: _AdhesiveImpactPainter(
-                            progress: impactProgress,
-                            color: scheme.primary,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0018)
+                ..rotateX(rotX)
+                ..rotateY(rotY)
+                ..rotateZ(rotZ),
+              child: Transform(
+                alignment: Alignment.center,
+                transform: Matrix4.identity()
+                  ..scaleByDouble(scaleX, scaleY, 1.0, 1.0),
+                child: Semantics(
+                  button: true,
+                  label: 'Memory sticker',
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      // Adhesive impact ring & sparkle particles
+                      if (impactProgress >= 0.0)
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _AdhesiveImpactPainter(
+                              progress: impactProgress,
+                              color: scheme.primary,
+                            ),
                           ),
                         ),
-                      ),
-                    // Dynamic Cast Shadow
-                    Transform.translate(
-                      offset: shadowOffset,
-                      child: Transform.scale(
-                        scale: shadowScale,
+                      // Dynamic Cast Shadow (optimized single transform and FilterQuality.low)
+                      Transform(
+                        alignment: Alignment.center,
+                        transform: Matrix4.identity()
+                          ..translateByDouble(
+                            shadowOffset.dx,
+                            shadowOffset.dy,
+                            0,
+                            1,
+                          )
+                          ..scaleByDouble(shadowScale, shadowScale, 1.0, 1.0),
                         child: _StickerImage(
                           file: file,
                           width: 168,
-                          filterQuality: FilterQuality.medium,
+                          filterQuality: FilterQuality.low,
                           color: scheme.shadow.withValues(alpha: shadowAlpha),
                         ),
                       ),
-                    ),
-                    // Die-Cut White Vinyl Backing Border
-                    Transform.translate(
-                      offset: const Offset(1.4, 1.8),
-                      child: _StickerImage(
-                        file: file,
-                        width: 168,
-                        color: scheme.surfaceContainerLowest,
-                      ),
-                    ),
-                    // Main Sticker with Gloss Sheen
-                    imageWidget,
-                  ],
+                      // Main Sticker with Gloss Sheen (Redundant white border removed)
+                      imageWidget,
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _AdhesiveImpactPainter extends CustomPainter {
@@ -359,6 +375,8 @@ class _StickerImage extends StatelessWidget {
       file,
       width: width,
       height: width,
+      cacheWidth: (width * 2).round(),
+      cacheHeight: (width * 2).round(),
       fit: BoxFit.contain,
       filterQuality: filterQuality,
       color: color,
@@ -376,4 +394,3 @@ class _StickerImage extends StatelessWidget {
     );
   }
 }
-

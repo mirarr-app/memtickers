@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../data/sticker.dart';
 import '../data/sticker_repository.dart';
@@ -75,6 +77,30 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
   double _startScale = 1;
   double _startRotation = 0;
   int _pointers = 0;
+  late final ValueNotifier<Offset> _tiltNotifier;
+  StreamSubscription<AccelerometerEvent>? _tiltSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _tiltNotifier = ValueNotifier<Offset>(Offset.zero);
+    _tiltSubscription = accelerometerEventStream().listen((event) {
+      final newX = (event.y * 0.035).clamp(-0.18, 0.18);
+      final newY = (-event.x * 0.035).clamp(-0.18, 0.18);
+      final current = _tiltNotifier.value;
+      if ((newX - current.dx).abs() >= 0.005 ||
+          (newY - current.dy).abs() >= 0.005) {
+        _tiltNotifier.value = Offset(newX, newY);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tiltSubscription?.cancel();
+    _tiltNotifier.dispose();
+    super.dispose();
+  }
 
   bool get _isSearching =>
       widget.searchFilter != null && widget.searchFilter!.isNotEmpty;
@@ -116,8 +142,10 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
         center: const Offset(kBoardSize / 2, kBoardSize / 2),
       );
 
-      return InteractiveViewer(
-        transformationController: widget.transformationController,
+      return StickerTiltScope(
+        tiltNotifier: _tiltNotifier,
+        child: InteractiveViewer(
+          transformationController: widget.transformationController,
         constrained: false,
         minScale: 0.35,
         maxScale: 3.5,
@@ -186,6 +214,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                         child: StickerObject(
                           key: ValueKey('search-obj-${item.sticker.id}'),
                           sticker: item.sticker,
+                          tiltNotifier: _tiltNotifier,
                           selected: _selectedId == item.sticker.id,
                           dropping: widget.droppingId == item.sticker.id,
                           snapping: widget.snappingId == item.sticker.id,
@@ -202,13 +231,16 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
             ),
           ),
         ),
-      );
+      ),
+    );
     }
 
     final isNavigationMode = widget.repository.activeBoard.isNavigationMode;
 
-    return InteractiveViewer(
-      transformationController: widget.transformationController,
+    return StickerTiltScope(
+      tiltNotifier: _tiltNotifier,
+      child: InteractiveViewer(
+        transformationController: widget.transformationController,
       constrained: false,
       minScale: 0.35,
       maxScale: 3.5,
@@ -235,6 +267,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                           ? StickerObject(
                               key: ValueKey('object-${sticker.id}'),
                               sticker: sticker,
+                              tiltNotifier: _tiltNotifier,
                               selected: _selectedId == sticker.id,
                               dropping: widget.droppingId == sticker.id,
                               snapping: widget.snappingId == sticker.id,
@@ -284,7 +317,8 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                                     scale: nextScale,
                                     rotation: _startRotation + details.rotation,
                                   );
-                                  widget.repository.updateTransform(next);
+                                  widget.repository.updateTransformInMemory(next);
+                                  setState(() {});
                                 },
                                 onScaleEnd: (_) {
                                   _lastFocal = null;
@@ -296,6 +330,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
                                 child: StickerObject(
                                   key: ValueKey('object-${sticker.id}'),
                                   sticker: sticker,
+                                  tiltNotifier: _tiltNotifier,
                                   selected: _selectedId == sticker.id,
                                   dropping: widget.droppingId == sticker.id,
                                   snapping: widget.snappingId == sticker.id,
@@ -314,7 +349,8 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
