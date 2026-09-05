@@ -260,6 +260,8 @@ class StickerRepository extends ChangeNotifier {
     final board = _boards.where((b) => b.id == id).firstOrNull;
     if (board == null) return;
 
+    final boardStickers = _stickers.where((s) => s.boardId == id).toList();
+
     _stickers.removeWhere((s) => s.boardId == id);
     _boards.removeWhere((b) => b.id == id);
 
@@ -271,14 +273,28 @@ class StickerRepository extends ChangeNotifier {
     if (!_isTestMode) {
       try {
         final db = await StickerDatabase.instance();
-        final boardStickers = _stickers.where((s) => s.boardId == id).toList();
+        await db.transaction((txn) async {
+          for (final sticker in boardStickers) {
+            await txn.delete('stickers', where: 'id = ?', whereArgs: [sticker.id]);
+            await txn.delete(
+              'sticker_tags',
+              where: 'stickerId = ?',
+              whereArgs: [sticker.id],
+            );
+            await txn.delete(
+              'sticker_model_tags',
+              where: 'stickerId = ?',
+              whereArgs: [sticker.id],
+            );
+          }
+          await txn.delete('boards', where: 'id = ?', whereArgs: [id]);
+          await txn.insert('settings', {
+            'key': 'activeBoardId',
+            'value': _activeBoardId,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        });
+
         for (final sticker in boardStickers) {
-          await db.delete('stickers', where: 'id = ?', whereArgs: [sticker.id]);
-          await db.delete(
-            'sticker_tags',
-            where: 'stickerId = ?',
-            whereArgs: [sticker.id],
-          );
           final file = File(sticker.imagePath);
           if (await file.exists()) {
             try {
@@ -286,11 +302,6 @@ class StickerRepository extends ChangeNotifier {
             } catch (_) {}
           }
         }
-        await db.delete('boards', where: 'id = ?', whereArgs: [id]);
-        await db.insert('settings', {
-          'key': 'activeBoardId',
-          'value': _activeBoardId,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
       } catch (_) {}
     }
   }
@@ -421,9 +432,15 @@ class StickerRepository extends ChangeNotifier {
     final tag = _tags.where((t) => t.id == id).firstOrNull;
     if (tag == null) return;
 
-    final db = await StickerDatabase.instance();
-    await db.delete('tags', where: 'id = ?', whereArgs: [id]);
-    await db.delete('sticker_tags', where: 'tagId = ?', whereArgs: [id]);
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        await db.transaction((txn) async {
+          await txn.delete('tags', where: 'id = ?', whereArgs: [id]);
+          await txn.delete('sticker_tags', where: 'tagId = ?', whereArgs: [id]);
+        });
+      } catch (_) {}
+    }
 
     _tags.removeWhere((t) => t.id == id);
 
@@ -473,70 +490,97 @@ class StickerRepository extends ChangeNotifier {
   }
 
   Future<void> save(Sticker sticker) async {
-    final db = await StickerDatabase.instance();
     final effectiveBoardId = sticker.boardId.isEmpty
         ? _activeBoardId
         : sticker.boardId;
     final preparedSticker = sticker.copyWith(boardId: effectiveBoardId);
-
-    await db.insert(
-      'stickers',
-      preparedSticker.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-
-    // Ensure tags in sticker.tags exist in db and link them
-    await db.delete(
-      'sticker_tags',
-      where: 'stickerId = ?',
-      whereArgs: [preparedSticker.id],
-    );
     final tagNames = preparedSticker.tags;
     final resolvedTags = <String>[];
+    final newTagsToCommit = <StickerTag>[];
 
-    for (final name in tagNames) {
-      final trimmed = name.trim();
-      if (trimmed.isEmpty) continue;
-      var tag = _tags
-          .where((t) => t.name.toLowerCase() == trimmed.toLowerCase())
-          .firstOrNull;
-      if (tag == null) {
-        tag = StickerTag(
-          id: const Uuid().v4(),
-          name: trimmed,
-          createdAt: DateTime.now(),
-        );
-        await db.insert(
-          'tags',
-          tag.toMap(),
+    if (!_isTestMode) {
+      final db = await StickerDatabase.instance();
+      await db.transaction((txn) async {
+        await txn.insert(
+          'stickers',
+          preparedSticker.toMap(),
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
-        _tags.add(tag);
+
+        // Ensure tags in sticker.tags exist in db and link them
+        await txn.delete(
+          'sticker_tags',
+          where: 'stickerId = ?',
+          whereArgs: [preparedSticker.id],
+        );
+
+        for (final name in tagNames) {
+          final trimmed = name.trim();
+          if (trimmed.isEmpty) continue;
+          var tag = _tags
+              .where((t) => t.name.toLowerCase() == trimmed.toLowerCase())
+              .firstOrNull;
+          tag ??= newTagsToCommit
+              .where((t) => t.name.toLowerCase() == trimmed.toLowerCase())
+              .firstOrNull;
+          if (tag == null) {
+            tag = StickerTag(
+              id: const Uuid().v4(),
+              name: trimmed,
+              createdAt: DateTime.now(),
+            );
+            await txn.insert(
+              'tags',
+              tag.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            newTagsToCommit.add(tag);
+          }
+          await txn.insert('sticker_tags', {
+            'stickerId': preparedSticker.id,
+            'tagId': tag.id,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          resolvedTags.add(tag.name);
+        }
+
+        // Save model tags in db
+        await txn.delete(
+          'sticker_model_tags',
+          where: 'stickerId = ?',
+          whereArgs: [preparedSticker.id],
+        );
+        for (final tag in preparedSticker.modelTags) {
+          final trimmed = tag.trim();
+          if (trimmed.isEmpty) continue;
+          await txn.insert('sticker_model_tags', {
+            'stickerId': preparedSticker.id,
+            'tag': trimmed,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+      _tags.addAll(newTagsToCommit);
+      _tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    } else {
+      for (final name in tagNames) {
+        final trimmed = name.trim();
+        if (trimmed.isEmpty) continue;
+        var tag = _tags
+            .where((t) => t.name.toLowerCase() == trimmed.toLowerCase())
+            .firstOrNull;
+        if (tag == null) {
+          tag = StickerTag(
+            id: const Uuid().v4(),
+            name: trimmed,
+            createdAt: DateTime.now(),
+          );
+          _tags.add(tag);
+        }
+        resolvedTags.add(tag.name);
       }
-      await db.insert('sticker_tags', {
-        'stickerId': preparedSticker.id,
-        'tagId': tag.id,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-      resolvedTags.add(tag.name);
+      _tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     }
-    _tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     final updatedSticker = preparedSticker.copyWith(tags: resolvedTags);
-
-    // Save model tags in db
-    await db.delete(
-      'sticker_model_tags',
-      where: 'stickerId = ?',
-      whereArgs: [preparedSticker.id],
-    );
-    for (final tag in preparedSticker.modelTags) {
-      final trimmed = tag.trim();
-      if (trimmed.isEmpty) continue;
-      await db.insert('sticker_model_tags', {
-        'stickerId': preparedSticker.id,
-        'tag': trimmed,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
 
     final index = _stickers.indexWhere((s) => s.id == preparedSticker.id);
     if (index >= 0) {
@@ -658,9 +702,11 @@ class StickerRepository extends ChangeNotifier {
     if (!_isTestMode) {
       try {
         final db = await StickerDatabase.instance();
-        await db.delete('stickers', where: 'id = ?', whereArgs: [id]);
-        await db.delete('sticker_tags', where: 'stickerId = ?', whereArgs: [id]);
-        await db.delete('sticker_model_tags', where: 'stickerId = ?', whereArgs: [id]);
+        await db.transaction((txn) async {
+          await txn.delete('stickers', where: 'id = ?', whereArgs: [id]);
+          await txn.delete('sticker_tags', where: 'stickerId = ?', whereArgs: [id]);
+          await txn.delete('sticker_model_tags', where: 'stickerId = ?', whereArgs: [id]);
+        });
       } catch (_) {}
     }
     _stickers.removeWhere((s) => s.id == id);

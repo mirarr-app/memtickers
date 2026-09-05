@@ -13,7 +13,10 @@ class StickerDatabase {
     final path = p.join(docs.path, 'memtickers.db');
     _db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON;');
+      },
       onCreate: (db, version) async {
         await db.execute('''
 CREATE TABLE boards (
@@ -23,9 +26,10 @@ CREATE TABLE boards (
   isNavigationMode INTEGER NOT NULL DEFAULT 0
 )
 ''');
-        await db.execute('''
-INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch}, 0)
-''');
+        await db.rawInsert(
+          'INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES (?, ?, ?, ?)',
+          ['default', 'Main Board', DateTime.now().millisecondsSinceEpoch, 0],
+        );
         await db.execute('''
 CREATE TABLE stickers (
   id TEXT PRIMARY KEY,
@@ -69,6 +73,18 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
   PRIMARY KEY (stickerId, tag)
 )
 ''');
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_stickers_boardId ON stickers(boardId);',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sticker_tags_stickerId ON sticker_tags(stickerId);',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sticker_tags_tagId ON sticker_tags(tagId);',
+        );
+        await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_sticker_model_tags_stickerId ON sticker_model_tags(stickerId);',
+        );
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -95,9 +111,10 @@ CREATE TABLE IF NOT EXISTS boards (
   createdAt INTEGER NOT NULL
 )
 ''');
-          await db.execute('''
-INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch})
-''');
+          await db.rawInsert(
+            'INSERT OR IGNORE INTO boards (id, name, createdAt) VALUES (?, ?, ?)',
+            ['default', 'Main Board', DateTime.now().millisecondsSinceEpoch],
+          );
           try {
             await db.execute(
               "ALTER TABLE stickers ADD COLUMN boardId TEXT NOT NULL DEFAULT 'default'",
@@ -120,56 +137,20 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
             );
           } catch (_) {}
         }
-      },
-      onOpen: (db) async {
-        await db.execute('''
-CREATE TABLE IF NOT EXISTS boards (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  createdAt INTEGER NOT NULL,
-  isNavigationMode INTEGER NOT NULL DEFAULT 0
-)
-''');
-        await db.execute('''
-INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES ('default', 'Main Board', ${DateTime.now().millisecondsSinceEpoch}, 0)
-''');
-        await db.execute('''
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-)
-''');
-        await db.execute('''
-CREATE TABLE IF NOT EXISTS tags (
-  id TEXT PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  createdAt INTEGER NOT NULL
-)
-''');
-        await db.execute('''
-CREATE TABLE IF NOT EXISTS sticker_tags (
-  stickerId TEXT NOT NULL,
-  tagId TEXT NOT NULL,
-  PRIMARY KEY (stickerId, tagId)
-)
-''');
-        await db.execute('''
-CREATE TABLE IF NOT EXISTS sticker_model_tags (
-  stickerId TEXT NOT NULL,
-  tag TEXT NOT NULL,
-  PRIMARY KEY (stickerId, tag)
-)
-''');
-        try {
+        if (oldVersion < 6) {
           await db.execute(
-            "ALTER TABLE stickers ADD COLUMN boardId TEXT NOT NULL DEFAULT 'default'",
+            'CREATE INDEX IF NOT EXISTS idx_stickers_boardId ON stickers(boardId);',
           );
-        } catch (_) {}
-        try {
           await db.execute(
-            "ALTER TABLE boards ADD COLUMN isNavigationMode INTEGER NOT NULL DEFAULT 0",
+            'CREATE INDEX IF NOT EXISTS idx_sticker_tags_stickerId ON sticker_tags(stickerId);',
           );
-        } catch (_) {}
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_sticker_tags_tagId ON sticker_tags(tagId);',
+          );
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_sticker_model_tags_stickerId ON sticker_model_tags(stickerId);',
+          );
+        }
       },
     );
     return _db!;
