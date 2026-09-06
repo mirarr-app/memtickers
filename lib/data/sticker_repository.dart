@@ -147,6 +147,10 @@ class StickerRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reloads all data from the database into memory and notifies listeners.
+  Future<void> reload() => init();
+
+
   int getStickerCountForTag(String tagName) {
     return stickers.where((s) => s.tags.contains(tagName)).length;
   }

@@ -51,6 +51,15 @@ app.*.map.json
 AGENTS.md
 .agents/
 .cursor/
+.cursorrules
+.geminirules
+.windsurfrules
+*.mdc
+rules/
+
+# Backup Archives
+*.memtickers
+memtickers_backup_*.zip
 
 # Project Notes
 project-notes/

@@ -155,4 +155,23 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
     );
     return _db!;
   }
+
+  static Future<String> getDatabasePath() async {
+    final docs = await getApplicationDocumentsDirectory();
+    return p.join(docs.path, 'memtickers.db');
+  }
+
+  static Future<void> checkpoint() async {
+    final db = await instance();
+    try {
+      await db.rawQuery('PRAGMA wal_checkpoint(FULL);');
+    } catch (_) {}
+  }
+
+  static Future<void> closeDatabase() async {
+    if (_db != null && _db!.isOpen) {
+      await _db!.close();
+      _db = null;
+    }
+  }
 }

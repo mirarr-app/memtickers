@@ -29,6 +29,9 @@ dependencies:
   thanos_snap_effect: ^0.0.9
   paper_shaders: ^0.0.3
   haptic_kit: ^2.2.0
+  archive: ^4.0.2
+  share_plus: ^10.1.4
+  file_picker: ^8.1.7
 
 dev_dependencies:
   flutter_test:
