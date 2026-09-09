@@ -1,0 +1,29 @@
+Categories:
+  - Graphics
+  - Multimedia
+License: Apache-2.0
+AuthorName: mirarr-app
+SourceCode: https://github.com/mirarr-app/memtickers
+IssueTracker: https://github.com/mirarr-app/memtickers/issues
+Changelog: https://github.com/mirarr-app/memtickers/releases
+
+AutoUpdateMode: Version %v
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@stable
+    prebuild:
+      - flutterVersion=$(sed -n -E "s/.*flutter-version:\ '(.*)'/\1/p" .github/workflows/build.yml)
+      - '[[ $flutterVersion ]]'
+      - git -C $$flutter$$ checkout -f $flutterVersion
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
+    build:
+      - $$flutter$$/bin/flutter build apk --release

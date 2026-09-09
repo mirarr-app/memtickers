@@ -1,0 +1,123 @@
+name: Build & Release Android App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build_android:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
+            echo "Keystore decoded successfully."
+          else
+            echo "Warning: KEYSTORE secret is not set; will fall back to debug signing if release credentials are absent."
+          fi
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/^[ \t]*//; s/[ \t]*$//')
+          VERSION_NAME=$(echo "$VERSION" | sed -E 's/([0-9.]+)\+?.*/\1/')
+          VERSION_CODE=$(echo "$VERSION" | sed -E 's/.*(\+)([0-9]+)/\2/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Build APK
+        run: flutter build apk --release
+        env:
+          KEYSTORE_FILE: keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Verify APK signature (jarsigner)
+        run: |
+          jarsigner -verify -verbose -certs build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Prepare Release Artifacts
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/memtickers-${{ steps.version.outputs.VERSION }}.apk
+
+      - name: List APK Directory
+        run: ls -alh dist/
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/memtickers-${{ steps.version.outputs.VERSION }}.apk
+
+  upload_release:
+    name: Create GitHub Release
+    needs: build_android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read version from pubspec.yaml
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //; s/^[ \t]*//; s/[ \t]*$//')
+          VERSION_NAME=$(echo "$VERSION" | sed -E 's/([0-9.]+)\+?.*/\1/')
+          VERSION_CODE=$(echo "$VERSION" | sed -E 's/.*(\+)([0-9]+)/\2/')
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=v$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: ./out/android
+
+      - name: List output directory
+        run: ls -lh ./out/android
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN || secrets.GITHUB_TOKEN }}
+        with:
+          files: |
+            ./out/android/*
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.version.outputs.TAG_NAME }}
+          name: Release ${{ github.ref_type == 'tag' && github.ref_name || steps.version.outputs.TAG_NAME }}
+          draft: false
+          prerelease: false

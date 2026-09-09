@@ -1,0 +1,11 @@
+<p><b>Memtickers</b> lets you capture memories and turn them into vinyl stickers on an infinite, interactive scrapbook canvas.</p>
+
+<p>Key Features:</p>
+<ul>
+  <li><b>Local AI Cutouts:</b> Fast on-device background segmentation using edge machine learning models.</li>
+  <li><b>Smart Auto-Tagging:</b> Generates visual context tags locally without external cloud APIs.</li>
+  <li><b>Vinyl &amp; Paper Aesthetics:</b> Authentic paper dithering shaders, interactive 3D physics tilt, and vinyl peel borders.</li>
+  <li><b>Infinite Canvas:</b> Freely pan, zoom, rotate, and arrange stickers across multiple scrapbook boards.</li>
+  <li><b>Private &amp; Offline:</b> All processing happens locally on your device. No analytics, no trackers, and no network requests.</li>
+  <li><b>Backup &amp; Restore:</b> Easily export and import your scrapbooks with full backward-compatibility.</li>
+</ul>

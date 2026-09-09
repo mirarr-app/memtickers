@@ -1,0 +1,5 @@
+Initial release of Memtickers!
+- Infinite scrapbook canvas with pinch, pan, zoom, and sticker rotation
+- On-device AI background removal and auto-tagging
+- Paper dithering and Thanos snap deletion effects
+- Multi-board organization and complete offline backup & restore
