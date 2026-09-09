@@ -6,7 +6,7 @@ homepage: https://github.com/mirarr-app/memtickers
 repository: https://github.com/mirarr-app/memtickers
 
 environment:
-  sdk: ^3.13.0
+  sdk: ^3.12.0
 
 dependencies:
   flutter:
