@@ -34,7 +34,7 @@ jobs:
 
       - name: Decode Keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE || secrets.KEYSTORE_FILE }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 --decode > android/app/keystore.jks
