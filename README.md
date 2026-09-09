@@ -12,7 +12,7 @@ Collect memories as vinyl stickers on an infinite scrapbook canvas.
 
 
 
-<p float="left"> https://github.com/user-attachments/assets/38ba9476-350e-48d2-bcb6-26421aa626ab </p>
+https://github.com/user-attachments/assets/38ba9476-350e-48d2-bcb6-26421aa626ab
 
 
 
