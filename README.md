@@ -28,6 +28,7 @@ Developed by [mirarr-app](https://github.com/mirarr-app).
 - **Smart Auto-Tagging**: On-device contextual image labeling with MobileCLIP without any cloud connectivity.
 - **Vinyl Sticker Physics & Shaders**: Interactive 3D tilt, realistic paper dithering shaders, and vinyl edge styling.
 - **Infinite Scrapbook Canvas**: Pan, pinch-to-zoom, rotate, and freely layer memory stickers across customizable boards.
+- **Share Studio**: Compose, resize, rotate, and snapshot sticker arrangements with customizable dynamic lighting and specular reflections.
 - **Private & 100% Offline**: Zero analytics, zero tracking, and no external network calls.
 - **Backup & Restore**: Export and import scrapbooks via Android SAF with backward-compatible schema migration.
 
