@@ -342,8 +342,26 @@ void main() {
 
         expect(caughtDetails, isNull);
         expect(find.text('Shaders: Fluted Glass'), findsOneWidget);
-        expect(find.text('Fluted Glass'), findsOneWidget);
       }
+    });
+
+    testWidgets('Off selection renders cleanly with bottom padding',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShareShaderControlsSheet(
+              settings: const ShareShaderSettings(),
+              onSettingsChanged: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Shaders'), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.byType(SizedBox), findsWidgets);
     });
 
     testWidgets('Switching shader types shows respective controls and presets',

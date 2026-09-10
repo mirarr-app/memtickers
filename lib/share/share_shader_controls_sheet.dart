@@ -59,6 +59,8 @@ class ShareShaderControlsSheet extends StatelessWidget {
             Expanded(
               child: _buildActiveShaderControls(scheme, textTheme),
             ),
+          ] else ...[
+            const SizedBox(height: 10),
           ],
         ],
       ),
