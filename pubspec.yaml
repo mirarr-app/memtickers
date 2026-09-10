@@ -1,7 +1,7 @@
 name: memtickers
 description: Collect memories as vinyl stickers on an infinite scrapbook.
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 homepage: https://github.com/mirarr-app/memtickers
 repository: https://github.com/mirarr-app/memtickers
 

@@ -1,0 +1,4 @@
+Memtickers 1.2.0 Update!
+- New Paper Shaders in Share Studio: apply and customize 9 artistic fragment shaders before sharing
+- Curated presets and granular controls for all shaders (Fluted Glass, Halftone Dots & CMYK, Dithering, Paper Texture, Heatmap, Water, Liquid Metal, Gem Smoke)
+- UI polish and improvements

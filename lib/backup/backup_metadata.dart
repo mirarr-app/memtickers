@@ -6,7 +6,7 @@ class BackupMetadata {
     required this.createdAt,
     required this.stickerCount,
     required this.boardCount,
-    this.appVersion = '1.1.0',
+    this.appVersion = '1.2.0',
   });
 
   final int version;
