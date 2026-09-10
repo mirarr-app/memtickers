@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:m3e_core/m3e_core.dart';
+import 'package:paper_shaders/paper_shaders.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -11,15 +12,16 @@ import '../data/sticker_repository.dart';
 import '../theme/app_haptics.dart';
 import '../theme/spacing.dart';
 import 'share_canvas_settings.dart';
-import 'share_light_source.dart';
+import 'share_canvas_shader_painter.dart';
+import 'share_shader_config.dart';
+import 'share_shader_controls_sheet.dart';
 import 'share_sticker_item.dart';
 import 'share_sticker_picker_sheet.dart';
 import 'sticker_reflection_view.dart';
 
 /// The best-in-class Share Studio screen.
 ///
-/// Allows users to compose stickers from their boards on a stage, adjust lighting
-/// with an invisible light source that generates real-time specular reflections,
+/// Allows users to compose stickers from their boards on a stage, apply shaders,
 /// and share high-resolution snapshots.
 class ShareStudioPage extends StatefulWidget {
   const ShareStudioPage({
@@ -40,30 +42,46 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
   final List<ShareStickerItem> _items = [];
   String? _selectedItemId;
 
-  late ShareLightSource _lightSource;
   ShareCanvasSettings _settings = const ShareCanvasSettings();
 
-  bool _isLightMode = false;
+  bool _isShadersMode = false;
   bool _isCapturing = false;
   int _nextZIndex = 1;
+
+  late final SnapshotController _shaderSnapshotController;
+  ShareShaderSettings _shaderSettings = const ShareShaderSettings();
+  ui.FragmentProgram? _flutedGlassProgram;
 
   @override
   void initState() {
     super.initState();
-    // Default initial light position (disabled by default so stickers appear flat)
-    _lightSource = const ShareLightSource(
-      position: Offset(120, 140),
-      intensity: 0.85,
-      height: 150.0,
-      tone: ShareLightTone.studioWhite,
-      isReticleVisible: false,
-      isEnabled: false,
-    );
+    _shaderSnapshotController = SnapshotController(allowSnapshotting: false);
+    _loadShaderPrograms();
 
     // Populate initial stickers from active or requested board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialStickers();
     });
+  }
+
+  Future<void> _loadShaderPrograms() async {
+    try {
+      final program =
+          await ui.FragmentProgram.fromAsset(FlutedGlassShader.assetKey);
+      if (mounted) {
+        setState(() {
+          _flutedGlassProgram = program;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading fluted glass shader: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _shaderSnapshotController.dispose();
+    super.dispose();
   }
 
   Size _getCanvasSize() {
@@ -125,9 +143,6 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
           ),
         );
       }
-      _lightSource = _lightSource.copyWith(
-        position: Offset(centerX * 0.7, centerY * 0.5),
-      );
       setState(() {});
     }
   }
@@ -136,12 +151,16 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
     setState(() {
       _selectedItemId = id;
       if (id != null) {
+        _isShadersMode = false;
         // Bring selected item visually to front
         final item = _items.firstWhere((it) => it.id == id);
         item.zIndex = _nextZIndex++;
         _items.sort((a, b) => a.zIndex.compareTo(b.zIndex));
       }
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   Future<void> _openStickerPicker() async {
@@ -191,6 +210,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
       }
       _selectedItemId = null;
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   // --- Auto-Layout Presets ---
@@ -216,6 +238,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
         item.scale = math.min(1.0, size.width / 320.0).clamp(0.65, 1.0);
       }
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   void _applyCleanGrid() {
@@ -242,6 +267,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
         item.scale = math.min(0.85, size.width / 340.0).clamp(0.6, 0.85);
       }
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   void _applyCircularCrown() {
@@ -264,6 +292,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
         item.scale = math.min(0.85, size.width / 340.0).clamp(0.6, 0.85);
       }
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   void _applyCascade() {
@@ -284,6 +315,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
         item.scale = math.min(0.95, size.width / 320.0).clamp(0.65, 0.95);
       }
     });
+    if (_shaderSettings.isEnabled) {
+      _shaderSnapshotController.clear();
+    }
   }
 
   // --- Snapshot Export & Share ---
@@ -296,6 +330,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
     });
 
     try {
+      if (_shaderSettings.isEnabled) {
+        _shaderSnapshotController.clear();
+      }
       // Ensure layout is cleanly painted
       await Future<void>.delayed(const Duration(milliseconds: 60));
 
@@ -430,6 +467,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
               setState(() {
                 _settings = _settings.copyWith(aspectRatio: ratios[nextIndex]);
               });
+              if (_shaderSettings.isEnabled) {
+                _shaderSnapshotController.clear();
+              }
             },
           ),
           const SizedBox(width: MdSpacing.xs),
@@ -451,6 +491,9 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
                 _settings =
                     _settings.copyWith(backgroundStyle: styles[nextIndex]);
               });
+              if (_shaderSettings.isEnabled) {
+                _shaderSnapshotController.clear();
+              }
             },
           ),
           const SizedBox(width: MdSpacing.xs),
@@ -480,107 +523,133 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
         borderRadius: BorderRadius.circular(16),
         child: Stack(
           children: [
-            // 1. Studio Backdrop
+            // Canvas content wrapped in SnapshotWidget for real-time shader rendering
             Positioned.fill(
-              child: _buildBackdrop(scheme),
-            ),
+              child: SnapshotWidget(
+                controller: _shaderSnapshotController,
+                painter: ShareCanvasShaderPainter(
+                  settings: _shaderSettings,
+                  flutedGlassProgram: _flutedGlassProgram,
+                ),
+                child: Stack(
+                  children: [
+                    // 1. Studio Backdrop
+                    Positioned.fill(
+                      child: _buildBackdrop(scheme),
+                    ),
 
-            // 2. Stickers with real-time dynamic light reflection
-            ..._items.map((item) {
-              return StickerReflectionView(
-                key: ValueKey(item.id),
-                item: item,
-                light: _lightSource,
-                isSelected: item.id == _selectedItemId && !_isCapturing,
-                onTap: () => _selectItem(item.id),
-                onPanUpdate: (details) {
-                  final canvasSize = _getCanvasSize();
-                  final minX = (item.effectiveWidth / 2) + 20.0;
-                  final maxX = canvasSize.width - (item.effectiveWidth / 2) - 20.0;
-                  final minY = (item.effectiveHeight / 2) + 20.0;
-                  final maxY = canvasSize.height - (item.effectiveHeight / 2) - 20.0;
-                  setState(() {
-                    final nextPos = item.position + details.delta;
-                    item.position = Offset(
-                      nextPos.dx.clamp(minX, maxX),
-                      nextPos.dy.clamp(minY, maxY),
-                    );
-                  });
-                },
-                onPanEnd: () => AppHaptics.lightImpact(),
-                onScaleChanged: (newScale) {
-                  setState(() {
-                    item.scale = newScale;
-                  });
-                },
-                onRotateUpdate: (details) {
-                  final canvasBox = _canvasRepaintKey.currentContext
-                      ?.findRenderObject() as RenderBox?;
-                  if (canvasBox != null) {
-                    final centerGlobal = canvasBox.localToGlobal(item.position);
-                    final vector = details.globalPosition - centerGlobal;
-                    final touchAngle = math.atan2(vector.dy, vector.dx);
-                    final newAngle = touchAngle + (math.pi / 2);
-                    setState(() {
-                      item.rotation = newAngle;
-                    });
-                  } else {
-                    setState(() {
-                      item.rotation += details.delta.dx / 100.0;
-                    });
-                  }
-                },
-                onRotationChanged: (newRotation) {
-                  setState(() {
-                    item.rotation = newRotation;
-                  });
-                },
-              );
-            }),
+                    // 2. Stickers on canvas
+                    ..._items.map((item) {
+                      return StickerReflectionView(
+                        key: ValueKey(item.id),
+                        item: item,
+                        isSelected: item.id == _selectedItemId && !_isCapturing,
+                        onTap: () => _selectItem(item.id),
+                        onPanUpdate: (details) {
+                          final canvasSize = _getCanvasSize();
+                          final minX = (item.effectiveWidth / 2) + 20.0;
+                          final maxX =
+                              canvasSize.width - (item.effectiveWidth / 2) - 20.0;
+                          final minY = (item.effectiveHeight / 2) + 20.0;
+                          final maxY =
+                              canvasSize.height - (item.effectiveHeight / 2) - 20.0;
+                          setState(() {
+                            final nextPos = item.position + details.delta;
+                            item.position = Offset(
+                              nextPos.dx.clamp(minX, maxX),
+                              nextPos.dy.clamp(minY, maxY),
+                            );
+                          });
+                          if (_shaderSettings.isEnabled) {
+                            _shaderSnapshotController.clear();
+                          }
+                        },
+                        onPanEnd: () {
+                          AppHaptics.lightImpact();
+                          if (_shaderSettings.isEnabled) {
+                            _shaderSnapshotController.clear();
+                          }
+                        },
+                        onScaleChanged: (newScale) {
+                          setState(() {
+                            item.scale = newScale;
+                          });
+                          if (_shaderSettings.isEnabled) {
+                            _shaderSnapshotController.clear();
+                          }
+                        },
+                        onRotateUpdate: (details) {
+                          final canvasBox = _canvasRepaintKey.currentContext
+                              ?.findRenderObject() as RenderBox?;
+                          if (canvasBox != null) {
+                            final centerGlobal =
+                                canvasBox.localToGlobal(item.position);
+                            final vector = details.globalPosition - centerGlobal;
+                            final touchAngle = math.atan2(vector.dy, vector.dx);
+                            final newAngle = touchAngle + (math.pi / 2);
+                            setState(() {
+                              item.rotation = newAngle;
+                            });
+                          } else {
+                            setState(() {
+                              item.rotation += details.delta.dx / 100.0;
+                            });
+                          }
+                          if (_shaderSettings.isEnabled) {
+                            _shaderSnapshotController.clear();
+                          }
+                        },
+                        onRotationChanged: (newRotation) {
+                          setState(() {
+                            item.rotation = newRotation;
+                          });
+                          if (_shaderSettings.isEnabled) {
+                            _shaderSnapshotController.clear();
+                          }
+                        },
+                      );
+                    }),
 
-            // 3. Invisible Light Source Placement Reticle
-            // Shown when user is in light adjustment mode, lighting is enabled,
-            // and reticle is set to visible (strictly excluded during snapshot capture!).
-            if (!_isCapturing &&
-                _lightSource.isEnabled &&
-                (_isLightMode || _lightSource.isReticleVisible))
-              _buildLightReticle(scheme),
-
-            // 4. Memtickers Badge Watermark (if enabled)
-            if (_settings.showWatermark)
-              Positioned(
-                right: 14,
-                bottom: 14,
-                child: Opacity(
-                  opacity: 0.65,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.auto_awesome_rounded,
-                        size: 14,
-                        color: _settings.backgroundStyle ==
-                                ShareBackgroundStyle.cleanWhite
-                            ? Colors.black54
-                            : Colors.white70,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Memtickers',
-                        style: TextStyle(
-                          fontFamily: 'Excalifont',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: _settings.backgroundStyle ==
-                                  ShareBackgroundStyle.cleanWhite
-                              ? Colors.black54
-                              : Colors.white70,
+                    // 3. Memtickers Badge Watermark (if enabled)
+                    if (_settings.showWatermark)
+                      Positioned(
+                        right: 14,
+                        bottom: 14,
+                        child: Opacity(
+                          opacity: 0.65,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.auto_awesome_rounded,
+                                size: 14,
+                                color: _settings.backgroundStyle ==
+                                        ShareBackgroundStyle.cleanWhite
+                                    ? Colors.black54
+                                    : Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Memtickers',
+                                style: TextStyle(
+                                  fontFamily: 'Excalifont',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _settings.backgroundStyle ==
+                                          ShareBackgroundStyle.cleanWhite
+                                      ? Colors.black54
+                                      : Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
+            ),
+
           ],
         ),
       ),
@@ -596,26 +665,7 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () {
-        if (_isLightMode && _lightSource.isEnabled) {
-          // If light mode is active and enabled, tap places the light!
-          AppHaptics.lightImpact();
-        } else {
-          // Deselect sticker on empty canvas tap
-          _selectItem(null);
-        }
-      },
-      onTapDown: (details) {
-        if (_isLightMode && _lightSource.isEnabled) {
-          AppHaptics.lightImpact();
-          setState(() {
-            _lightSource = _lightSource.copyWith(
-              position: details.localPosition,
-              isReticleVisible: true,
-            );
-          });
-        }
-      },
+      onTap: () => _selectItem(null),
       child: Container(
         margin: const EdgeInsets.all(MdSpacing.md),
         decoration: BoxDecoration(
@@ -698,73 +748,6 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
           color: Colors.transparent,
         );
     }
-  }
-
-  /// Luminous interactive reticle indicating the invisible light source position
-  Widget _buildLightReticle(ColorScheme scheme) {
-    return Positioned(
-      left: _lightSource.position.dx - 36,
-      top: _lightSource.position.dy - 36,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanUpdate: (details) {
-          setState(() {
-            _lightSource = _lightSource.copyWith(
-              position: _lightSource.position + details.delta,
-              isReticleVisible: true,
-            );
-          });
-        },
-        onPanEnd: (_) => AppHaptics.lightImpact(),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Outer radiant glow
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    _lightSource.tone.color.withValues(
-                      alpha: (0.60 * (_lightSource.intensity / 0.85))
-                          .clamp(0.12, 0.90),
-                    ),
-                    _lightSource.tone.color.withValues(
-                      alpha: (0.18 * (_lightSource.intensity / 0.85))
-                          .clamp(0.04, 0.40),
-                    ),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-            // Light source core
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _lightSource.tone.color,
-                boxShadow: [
-                  BoxShadow(
-                    color: _lightSource.tone.color.withValues(alpha: 0.8),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Icon(
-                _lightSource.tone.icon,
-                size: 18,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildBottomBar(ColorScheme scheme, TextTheme textTheme) {
@@ -931,178 +914,18 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
             ),
           ],
 
-          // If Light Mode is on, show comprehensive light configuration controls
-          if (_isLightMode) ...[
-            Row(
-              children: [
-                Icon(
-                  _lightSource.isEnabled
-                      ? _lightSource.tone.icon
-                      : Icons.blur_off_rounded,
-                  size: 20,
-                  color: _lightSource.isEnabled ? scheme.primary : scheme.outline,
-                ),
-                const SizedBox(width: MdSpacing.xs),
-                Expanded(
-                  child: Text(
-                    _lightSource.isEnabled
-                        ? 'Lighting: ${_lightSource.isReticleVisible ? "Visible Reticle" : "Invisible"}'
-                        : 'Lighting: Flat (Disabled)',
-                    style: textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                ),
-                // Toggle lighting completely ON or OFF (Flat)
-                TextButton.icon(
-                  onPressed: () {
-                    AppHaptics.mediumImpact();
-                    setState(() {
-                      final newEnabled = !_lightSource.isEnabled;
-                      _lightSource = _lightSource.copyWith(
-                        isEnabled: newEnabled,
-                        isReticleVisible: newEnabled,
-                      );
-                    });
-                  },
-                  icon: Icon(
-                    _lightSource.isEnabled
-                        ? Icons.flash_off_rounded
-                        : Icons.flash_on_rounded,
-                    size: 16,
-                  ),
-                  label: Text(
-                    _lightSource.isEnabled ? 'Disable (Flat)' : 'Enable Light',
-                  ),
-                ),
-                if (_lightSource.isEnabled) ...[
-                  const SizedBox(width: MdSpacing.xxs),
-                  // Toggle invisibility
-                  TextButton.icon(
-                    onPressed: () {
-                      AppHaptics.lightImpact();
-                      setState(() {
-                        _lightSource = _lightSource.copyWith(
-                          isReticleVisible: !_lightSource.isReticleVisible,
-                        );
-                      });
-                    },
-                    icon: Icon(
-                      _lightSource.isReticleVisible
-                          ? Icons.visibility_off_rounded
-                          : Icons.visibility_rounded,
-                      size: 16,
-                    ),
-                    label: Text(
-                      _lightSource.isReticleVisible
-                          ? 'Make Invisible'
-                          : 'Show Reticle',
-                    ),
-                  ),
-                ],
-              ],
+          // Shaders configuration controls panel
+          if (_isShadersMode) ...[
+            ShareShaderControlsSheet(
+              settings: _shaderSettings,
+              onSettingsChanged: (newSettings) {
+                setState(() {
+                  _shaderSettings = newSettings;
+                  _shaderSnapshotController.allowSnapshotting =
+                      newSettings.isEnabled;
+                });
+              },
             ),
-            if (!_lightSource.isEnabled)
-              Padding(
-                padding: const EdgeInsets.only(bottom: MdSpacing.xs),
-                child: Text(
-                  'Lighting is disabled. Stickers appear flat without reflections.',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            // Tone selector chips & intensity control (only visible when lighting is enabled)
-            if (_lightSource.isEnabled) ...[
-              SizedBox(
-                height: 36,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children: ShareLightTone.values.map((tone) {
-                    final isSelected = _lightSource.tone == tone;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: MdSpacing.xs),
-                      child: FilterChip(
-                        selected: isSelected,
-                        avatar: CircleAvatar(
-                          backgroundColor: tone.color,
-                          radius: 7,
-                        ),
-                        label: Text(tone.label),
-                        onSelected: (val) {
-                          AppHaptics.selection();
-                          setState(() {
-                            _lightSource = _lightSource.copyWith(tone: tone);
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: MdSpacing.xs),
-              // Light Intensity Slider Control
-              Padding(
-                padding: const EdgeInsets.only(bottom: MdSpacing.xxs),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.wb_sunny_rounded,
-                      size: 16,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: MdSpacing.xs),
-                    Text(
-                      'Intensity',
-                      style: textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: scheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: MdSpacing.xs),
-                    Expanded(
-                      child: SliderTheme(
-                        data: SliderTheme.of(context).copyWith(
-                          trackHeight: 3,
-                          thumbShape: const RoundSliderThumbShape(
-                            enabledThumbRadius: 7,
-                          ),
-                          overlayShape: const RoundSliderOverlayShape(
-                            overlayRadius: 14,
-                          ),
-                        ),
-                        child: Slider(
-                          value: _lightSource.intensity.clamp(0.1, 1.0),
-                          min: 0.1,
-                          max: 1.0,
-                          divisions: 18,
-                          label: '${(_lightSource.intensity * 100).round()}%',
-                          onChanged: (val) {
-                            setState(() {
-                              _lightSource =
-                                  _lightSource.copyWith(intensity: val);
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 38,
-                      child: Text(
-                        '${(_lightSource.intensity * 100).round()}%',
-                        textAlign: TextAlign.end,
-                        style: textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: MdSpacing.xs),
           ],
 
@@ -1121,27 +944,27 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
                 ),
                 const SizedBox(width: MdSpacing.xs),
 
-                // Lighting Section Toggle (Reflects Flat vs Active vs Off)
+                // Shaders Section Toggle
                 FilterChip(
                   avatar: Icon(
-                    !_lightSource.isEnabled
-                        ? Icons.blur_off_rounded
-                        : (_isLightMode
-                            ? Icons.highlight_rounded
-                            : Icons.light_mode_outlined),
+                    _shaderSettings.isEnabled
+                        ? _shaderSettings.type.icon
+                        : Icons.auto_awesome_motion_rounded,
                     size: 16,
                   ),
-                  label: Text(!_lightSource.isEnabled
-                      ? 'Lighting (Flat)'
-                      : (_isLightMode ? 'Lighting (Active)' : 'Lighting')),
-                  selected: _isLightMode,
+                  label: Text(_shaderSettings.isEnabled
+                      ? 'Shaders (${_shaderSettings.type.label})'
+                      : (_isShadersMode ? 'Shaders (Active)' : 'Shaders')),
+                  selected: _isShadersMode,
                   onSelected: (val) {
                     AppHaptics.lightImpact();
                     setState(() {
-                      _isLightMode = val;
-                      if (val && _lightSource.isEnabled) {
-                        _lightSource =
-                            _lightSource.copyWith(isReticleVisible: true);
+                      _isShadersMode = val;
+                      if (val) {
+                        _selectedItemId = null;
+                        if (_shaderSettings.isEnabled) {
+                          _shaderSnapshotController.clear();
+                        }
                       }
                     });
                   },

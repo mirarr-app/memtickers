@@ -14,7 +14,7 @@ class StickerReflectionView extends StatelessWidget {
   const StickerReflectionView({
     super.key,
     required this.item,
-    required this.light,
+    this.light = const ShareLightSource(position: Offset.zero, isEnabled: false),
     required this.isSelected,
     required this.onTap,
     required this.onPanUpdate,

@@ -225,7 +225,7 @@ void main() {
     });
 
     testWidgets(
-        'ShareStudioPage has lighting disabled by default, toggles to dynamic lighting',
+        'ShareStudioPage does not show lighting section and provides shaders and stickers controls',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -236,39 +236,12 @@ void main() {
 
       expect(find.text('Share Studio'), findsOneWidget);
 
-      // Verify lighting chip indicates flat mode by default
-      final lightingChip = find.text('Lighting (Flat)');
-      expect(lightingChip, findsOneWidget);
+      // Verify lighting chip is completely removed
+      expect(find.text('Lighting'), findsNothing);
+      expect(find.text('Lighting (Flat)'), findsNothing);
 
-      // Tap Lighting chip in bottom toolbar
-      await tester.tap(lightingChip);
-      await tester.pumpAndSettle();
-
-      // Verify lighting is flat by default
-      expect(find.text('Lighting: Flat (Disabled)'), findsOneWidget);
-      expect(find.text('Enable Light'), findsOneWidget);
-
-      // Enable dynamic lighting
-      await tester.tap(find.text('Enable Light'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Disable (Flat)'), findsOneWidget);
-      expect(find.text('Make Invisible'), findsOneWidget);
-
-      // Verify customizable intensity slider
-      expect(find.text('Intensity'), findsOneWidget);
-      final intensitySlider = find.byType(Slider);
-      expect(intensitySlider, findsOneWidget);
-
-      // Drag the intensity slider
-      await tester.drag(intensitySlider, const Offset(-40, 0));
-      await tester.pumpAndSettle();
-
-      // Disable lighting again to return to flat
-      await tester.tap(find.text('Disable (Flat)'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Enable Light'), findsOneWidget);
+      // Verify shaders chip is present in toolbar
+      expect(find.text('Shaders'), findsOneWidget);
     });
 
     testWidgets(
