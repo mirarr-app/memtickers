@@ -132,36 +132,151 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
   Future<void> _editBoard(StickerBoard board) async {
     final count = widget.repository.getStickerCountForBoard(board.id);
 
-    final newName = await showDialog<String>(
+    final result = await showDialog<
+        ({String name, BoardBackgroundStyle backgroundStyle})>(
       context: context,
       builder: (context) => _EditBoardDialog(board: board, count: count),
     );
 
-    if (newName != null && newName.isNotEmpty && newName != board.name) {
-      final conflict = widget.repository.boards
-          .where(
-            (b) =>
-                b.id != board.id &&
-                b.name.toLowerCase() == newName.toLowerCase(),
-          )
-          .firstOrNull;
-      if (conflict != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Board "$newName" already exists.'),
-              duration: const Duration(seconds: 2),
-            ),
-          );
+    if (result != null && result.name.isNotEmpty) {
+      final newName = result.name;
+      final newStyle = result.backgroundStyle;
+      final nameChanged = newName != board.name;
+      final styleChanged = newStyle != board.backgroundStyle;
+
+      if (!nameChanged && !styleChanged) return;
+
+      if (nameChanged) {
+        final conflict = widget.repository.boards
+            .where(
+              (b) =>
+                  b.id != board.id &&
+                  b.name.toLowerCase() == newName.toLowerCase(),
+            )
+            .firstOrNull;
+        if (conflict != null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Board "$newName" already exists.'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+          return;
         }
-        return;
       }
+
       AppHaptics.mediumImpact();
-      await widget.repository.updateBoard(board.id, newName);
+      await widget.repository.updateBoard(
+        board.id,
+        newName,
+        backgroundStyle: newStyle,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Board renamed to "$newName"'),
+            content: Text('Board "${board.name}" updated.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showBoardBackgroundPicker(StickerBoard board) async {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    final selected = await showModalBottomSheet<BoardBackgroundStyle>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.palette_rounded, color: scheme.primary, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Background for "${board.name}"',
+                      style: textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                for (final style in BoardBackgroundStyle.values)
+                  ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    leading: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: style.primaryColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: scheme.outlineVariant,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: style.primaryColor == Colors.white
+                          ? Center(
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: scheme.outlineVariant,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            )
+                          : null,
+                    ),
+                    title: Text(
+                      style.label,
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontWeight: board.backgroundStyle == style
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    subtitle: Text(
+                      style.description,
+                      style: textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    trailing: board.backgroundStyle == style
+                        ? Icon(Icons.check_circle_rounded, color: scheme.primary)
+                        : null,
+                    onTap: () => Navigator.pop(ctx, style),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected != null && selected != board.backgroundStyle) {
+      AppHaptics.mediumImpact();
+      await widget.repository.updateBoardBackgroundStyle(board.id, selected);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Background set to "${selected.label}" for "${board.name}".'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -528,15 +643,28 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                             ),
                                           ),
                                         ],
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          width: 14,
+                                          height: 14,
+                                          decoration: BoxDecoration(
+                                            color: board.backgroundStyle.primaryColor,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: scheme.outlineVariant,
+                                              width: 1.2,
+                                            ),
+                                          ),
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       board.isNavigationMode
-                                          ? '${count == 1 ? '1 sticker' : '$count stickers'} • Locked (Nav Mode)'
+                                          ? '${count == 1 ? '1 sticker' : '$count stickers'} • Locked • ${board.backgroundStyle.label}'
                                           : (count == 1
-                                              ? '1 memory sticker'
-                                              : '$count memory stickers'),
+                                              ? '1 memory sticker • ${board.backgroundStyle.label}'
+                                              : '$count memory stickers • ${board.backgroundStyle.label}'),
                                       style: textTheme.bodySmall?.copyWith(
                                         color: board.isNavigationMode
                                             ? scheme.tertiary
@@ -545,6 +673,18 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                     ),
                                   ],
                                 ),
+                              ),
+                              IconButton(
+                                tooltip: 'Change background (${board.backgroundStyle.label})',
+                                icon: const Icon(Icons.palette_outlined, size: 18),
+                                style: IconButton.styleFrom(
+                                  padding: const EdgeInsets.all(6),
+                                  minimumSize: const Size(32, 32),
+                                ),
+                                onPressed: () {
+                                  AppHaptics.lightImpact();
+                                  _showBoardBackgroundPicker(board);
+                                },
                               ),
                               IconButton(
                                 tooltip: board.isNavigationMode
@@ -585,7 +725,7 @@ class _BoardsSheetBodyState extends State<_BoardsSheetBody> {
                                 },
                               ),
                               IconButton(
-                                tooltip: 'Edit board name',
+                                tooltip: 'Edit board',
                                 icon: const Icon(Icons.edit_outlined, size: 18),
                                 style: IconButton.styleFrom(
                                   padding: const EdgeInsets.all(6),
@@ -644,11 +784,13 @@ class _EditBoardDialog extends StatefulWidget {
 
 class _EditBoardDialogState extends State<_EditBoardDialog> {
   late final TextEditingController _controller;
+  late BoardBackgroundStyle _selectedStyle;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.board.name);
+    _selectedStyle = widget.board.backgroundStyle;
   }
 
   @override
@@ -685,33 +827,78 @@ class _EditBoardDialogState extends State<_EditBoardDialog> {
         style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
         textAlign: TextAlign.center,
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Rename this board (${widget.count} sticker${widget.count == 1 ? "" : "s"}).',
-            style: textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: MdSpacing.sm),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            textCapitalization: TextCapitalization.words,
-            decoration: InputDecoration(
-              labelText: 'Board Name',
-              prefixIcon: const Icon(Icons.dashboard_outlined, size: 20),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Customize board name and canvas background style (${widget.count} sticker${widget.count == 1 ? "" : "s"}).',
+              style: textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
-              filled: true,
-              fillColor: scheme.surfaceContainerLowest,
             ),
-            onSubmitted: (value) => Navigator.pop(context, value.trim()),
-          ),
-        ],
+            const SizedBox(height: MdSpacing.sm),
+            TextField(
+              controller: _controller,
+              autofocus: false,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Board Name',
+                prefixIcon: const Icon(Icons.dashboard_outlined, size: 20),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(MdSpacing.radiusMd),
+                ),
+                filled: true,
+                fillColor: scheme.surfaceContainerLowest,
+              ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  Navigator.pop(
+                    context,
+                    (name: value.trim(), backgroundStyle: _selectedStyle),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: MdSpacing.md),
+            Text(
+              'Background Style',
+              style: textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: scheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: MdSpacing.xs),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: BoardBackgroundStyle.values.map((style) {
+                final isSelected = _selectedStyle == style;
+                return ChoiceChip(
+                  selected: isSelected,
+                  avatar: CircleAvatar(
+                    radius: 8,
+                    backgroundColor: style.primaryColor,
+                    child: style.primaryColor == Colors.white
+                        ? Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black26, width: 1),
+                            ),
+                          )
+                        : null,
+                  ),
+                  label: Text(style.label),
+                  onSelected: (_) {
+                    AppHaptics.selection();
+                    setState(() => _selectedStyle = style);
+                  },
+                );
+              }).toList(),
+            ),
+          ],
+        ),
       ),
       actionsAlignment: MainAxisAlignment.end,
       actions: [
@@ -723,7 +910,15 @@ class _EditBoardDialogState extends State<_EditBoardDialog> {
         const SizedBox(width: MdSpacing.xs),
         M3EFilledButton.icon(
           size: M3EButtonSize.sm,
-          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          onPressed: () {
+            final name = _controller.text.trim();
+            if (name.isNotEmpty) {
+              Navigator.pop(
+                context,
+                (name: name, backgroundStyle: _selectedStyle),
+              );
+            }
+          },
           icon: const Icon(Icons.check_rounded, size: 18),
           label: const Text('Save'),
         ),

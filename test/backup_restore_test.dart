@@ -192,4 +192,81 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Restore'), findsOneWidget);
     });
   });
+
+  group('Database Schema Migration & Older Version Backup Restoration', () {
+    test('legacy board database row without backgroundStyle deserializes cleanly', () {
+      final now = DateTime.utc(2026, 9, 1);
+      final legacyRow = <String, Object?>{
+        'id': 'b-legacy-1',
+        'name': 'Trip to Tokyo',
+        'createdAt': now.millisecondsSinceEpoch,
+        'isNavigationMode': 1,
+        // backgroundStyle is omitted, matching older database schema versions (v1-v6)
+      };
+
+      final board = StickerBoard.fromMap(legacyRow);
+      expect(board.id, 'b-legacy-1');
+      expect(board.name, 'Trip to Tokyo');
+      expect(board.isNavigationMode, true);
+      // Backward compatibility guarantee: defaults to minimalSurface without crash or data loss
+      expect(board.backgroundStyle, BoardBackgroundStyle.minimalSurface);
+    });
+
+    test('modern board row with backgroundStyle deserializes correctly', () {
+      final now = DateTime.utc(2026, 9, 1);
+      final row = <String, Object?>{
+        'id': 'b-v7',
+        'name': 'Vintage Scrapbook',
+        'createdAt': now.millisecondsSinceEpoch,
+        'isNavigationMode': 0,
+        'backgroundStyle': 'craftPaper',
+      };
+
+      final board = StickerBoard.fromMap(row);
+      expect(board.backgroundStyle, BoardBackgroundStyle.craftPaper);
+    });
+
+    test('StickerBoard serialization roundtrip preserves backgroundStyle', () {
+      final board = StickerBoard(
+        id: 'b-roundtrip',
+        name: 'Noir Gallery',
+        createdAt: DateTime(2026, 9, 2),
+        backgroundStyle: BoardBackgroundStyle.studioNoir,
+      );
+
+      final map = board.toMap();
+      expect(map['backgroundStyle'], 'studioNoir');
+
+      final restored = StickerBoard.fromMap(map);
+      expect(restored.id, board.id);
+      expect(restored.name, board.name);
+      expect(
+        restored.createdAt.millisecondsSinceEpoch,
+        board.createdAt.millisecondsSinceEpoch,
+      );
+      expect(restored.backgroundStyle, BoardBackgroundStyle.studioNoir);
+    });
+
+    test('corrupted or unrecognized backgroundStyle safely falls back to minimalSurface', () {
+      final row = <String, Object?>{
+        'id': 'b-fallback',
+        'name': 'Unknown Style',
+        'createdAt': 123456789,
+        'isNavigationMode': 0,
+        'backgroundStyle': 'some_unknown_nonexistent_style',
+      };
+
+      final board = StickerBoard.fromMap(row);
+      expect(board.backgroundStyle, BoardBackgroundStyle.minimalSurface);
+    });
+
+    test('all BoardBackgroundStyle values have valid configurations', () {
+      for (final style in BoardBackgroundStyle.values) {
+        expect(style.id.isNotEmpty, true);
+        expect(style.label.isNotEmpty, true);
+        expect(style.description.isNotEmpty, true);
+        expect(style.primaryColor.a, greaterThan(0));
+      }
+    });
+  });
 }

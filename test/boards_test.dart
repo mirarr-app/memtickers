@@ -26,6 +26,7 @@ void main() {
       expect(map['name'], 'Japan 2026');
       expect(map['createdAt'], now.millisecondsSinceEpoch);
       expect(map['isNavigationMode'], 1);
+      expect(map['backgroundStyle'], 'minimalSurface');
 
       final restored = StickerBoard.fromMap(map);
       expect(restored.id, 'b-1');
@@ -35,6 +36,51 @@ void main() {
         now.millisecondsSinceEpoch,
       );
       expect(restored.isNavigationMode, true);
+      expect(restored.backgroundStyle, BoardBackgroundStyle.minimalSurface);
+    });
+
+    test('toMap and fromMap with custom backgroundStyle', () {
+      final now = DateTime.now();
+      final board = StickerBoard(
+        id: 'b-2',
+        name: 'Craft Notes',
+        createdAt: now,
+        backgroundStyle: BoardBackgroundStyle.craftPaper,
+      );
+
+      final map = board.toMap();
+      expect(map['backgroundStyle'], 'craftPaper');
+
+      final restored = StickerBoard.fromMap(map);
+      expect(restored.backgroundStyle, BoardBackgroundStyle.craftPaper);
+    });
+
+    test('fromMap with missing backgroundStyle defaults to minimalSurface (backward compatibility)', () {
+      final now = DateTime.now();
+      final legacyMap = {
+        'id': 'b-legacy',
+        'name': 'Old Board',
+        'createdAt': now.millisecondsSinceEpoch,
+        'isNavigationMode': 0,
+        // Notice 'backgroundStyle' is not present
+      };
+
+      final restored = StickerBoard.fromMap(legacyMap);
+      expect(restored.backgroundStyle, BoardBackgroundStyle.minimalSurface);
+    });
+
+    test('copyWith backgroundStyle', () {
+      final board = StickerBoard(
+        id: 'b-1',
+        name: 'Road Trip',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      expect(board.backgroundStyle, BoardBackgroundStyle.minimalSurface);
+
+      final updated = board.copyWith(
+        backgroundStyle: BoardBackgroundStyle.studioNoir,
+      );
+      expect(updated.backgroundStyle, BoardBackgroundStyle.studioNoir);
     });
 
     test('copyWith isNavigationMode', () {
@@ -608,6 +654,83 @@ void main() {
 
       // ScrapbookPage immediately removes lock icon
       expect(find.byTooltip('Navigation mode (locked)'), findsNothing);
+    });
+
+    testWidgets('changing board background style via palette picker and edit dialog updates board', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = StickerRepository();
+      final board = StickerBoard(
+        id: 'b-main',
+        name: 'My Canvas',
+        createdAt: DateTime(2026, 1, 1),
+        backgroundStyle: BoardBackgroundStyle.minimalSurface,
+      );
+
+      repo.populateForTesting(
+        stickers: [],
+        boards: [board],
+        activeBoardId: 'b-main',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: ScrapbookPage(repository: repo),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify active board in empty state title
+      expect(find.text('Peel a memory onto My Canvas'), findsOneWidget);
+
+      // Open boards sheet
+      await tester.tap(find.byTooltip('Boards'));
+      await tester.pumpAndSettle();
+
+      // Verify background style label on board tile
+      expect(find.text('0 memory stickers • Minimal M3'), findsOneWidget);
+
+      // Tap palette button to open quick background picker
+      final paletteButton = find.byTooltip('Change background (Minimal M3)');
+      expect(paletteButton, findsOneWidget);
+      await tester.tap(paletteButton);
+      await tester.pumpAndSettle();
+
+      // Verify background options appear
+      expect(find.text('Craft Paper'), findsOneWidget);
+      expect(find.text('Studio Noir'), findsOneWidget);
+      expect(find.text('Sunset Glow'), findsOneWidget);
+
+      // Pick Craft Paper
+      await tester.tap(find.text('Craft Paper'));
+      await tester.pumpAndSettle();
+
+      // Verify board background was updated in repository
+      expect(repo.activeBoard.backgroundStyle, BoardBackgroundStyle.craftPaper);
+      expect(find.text('0 memory stickers • Craft Paper'), findsOneWidget);
+
+      // Now test editing board name and style in Edit Dialog
+      await tester.tap(find.byTooltip('Edit board'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Board Name'), findsOneWidget);
+      expect(find.text('Background Style'), findsOneWidget);
+
+      // Select Sunset Glow choice chip in dialog
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Sunset Glow'));
+      await tester.pumpAndSettle();
+
+      // Save
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(repo.activeBoard.backgroundStyle, BoardBackgroundStyle.sunsetPeach);
     });
   });
 }

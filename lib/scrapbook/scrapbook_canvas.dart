@@ -153,11 +153,16 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
         child: SizedBox(
           width: kBoardSize,
           height: kBoardSize,
-          child: ColoredBox(
-            color: scheme.surface,
-            child: Stack(
-              children: [
-                if (matching.isEmpty)
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: widget.repository.activeBoard.backgroundStyle.buildWidget(
+                  context,
+                  width: kBoardSize,
+                  height: kBoardSize,
+                ),
+              ),
+              if (matching.isEmpty)
                   Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 360),
@@ -231,8 +236,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
             ),
           ),
         ),
-      ),
-    );
+      );
     }
 
     final isNavigationMode = widget.repository.activeBoard.isNavigationMode;
@@ -250,11 +254,16 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
       child: SizedBox(
         width: kBoardSize,
         height: kBoardSize,
-        child: ColoredBox(
-          color: scheme.surface,
-          child: Stack(
-            children: [
-              for (final sticker in _sorted)
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: widget.repository.activeBoard.backgroundStyle.buildWidget(
+                context,
+                width: kBoardSize,
+                height: kBoardSize,
+              ),
+            ),
+            for (final sticker in _sorted)
                 Positioned(
                   key: ValueKey(sticker.id),
                   left: sticker.x,
@@ -355,8 +364,7 @@ class _ScrapbookCanvasState extends State<ScrapbookCanvas> {
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
 

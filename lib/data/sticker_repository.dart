@@ -8,11 +8,14 @@ import 'package:uuid/uuid.dart';
 
 import '../capture/auto_tag_service.dart';
 import '../theme/app_haptics.dart';
+import 'board_background_style.dart';
 import 'sticker.dart';
 import 'sticker_board.dart';
 import 'sticker_database.dart';
 import 'sticker_settings.dart';
 import 'sticker_tag.dart';
+
+export 'board_background_style.dart';
 
 class StickerRepository extends ChangeNotifier {
   final List<Sticker> _stickers = [];
@@ -178,7 +181,10 @@ class StickerRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<StickerBoard> createBoard(String name) async {
+  Future<StickerBoard> createBoard(
+    String name, {
+    BoardBackgroundStyle backgroundStyle = BoardBackgroundStyle.minimalSurface,
+  }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError('Board name cannot be empty');
@@ -187,6 +193,7 @@ class StickerRepository extends ChangeNotifier {
       id: const Uuid().v4(),
       name: trimmed,
       createdAt: DateTime.now(),
+      backgroundStyle: backgroundStyle,
     );
     _boards.add(newBoard);
     _activeBoardId = newBoard.id;
@@ -209,7 +216,11 @@ class StickerRepository extends ChangeNotifier {
     return newBoard;
   }
 
-  Future<void> updateBoard(String id, String newName) async {
+  Future<void> updateBoard(
+    String id,
+    String newName, {
+    BoardBackgroundStyle? backgroundStyle,
+  }) async {
     final trimmed = newName.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError('Board name cannot be empty');
@@ -217,7 +228,38 @@ class StickerRepository extends ChangeNotifier {
     final index = _boards.indexWhere((b) => b.id == id);
     if (index == -1) return;
 
-    _boards[index] = _boards[index].copyWith(name: trimmed);
+    _boards[index] = _boards[index].copyWith(
+      name: trimmed,
+      backgroundStyle: backgroundStyle ?? _boards[index].backgroundStyle,
+    );
+    notifyListeners();
+
+    if (!_isTestMode) {
+      try {
+        final db = await StickerDatabase.instance();
+        final values = <String, Object?>{'name': trimmed};
+        if (backgroundStyle != null) {
+          values['backgroundStyle'] = backgroundStyle.id;
+        }
+        await db.update(
+          'boards',
+          values,
+          where: 'id = ?',
+          whereArgs: [id],
+        );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> updateBoardBackgroundStyle(
+    String id,
+    BoardBackgroundStyle backgroundStyle,
+  ) async {
+    final index = _boards.indexWhere((b) => b.id == id);
+    if (index == -1) return;
+    if (_boards[index].backgroundStyle == backgroundStyle) return;
+
+    _boards[index] = _boards[index].copyWith(backgroundStyle: backgroundStyle);
     notifyListeners();
 
     if (!_isTestMode) {
@@ -225,7 +267,7 @@ class StickerRepository extends ChangeNotifier {
         final db = await StickerDatabase.instance();
         await db.update(
           'boards',
-          {'name': trimmed},
+          {'backgroundStyle': backgroundStyle.id},
           where: 'id = ?',
           whereArgs: [id],
         );

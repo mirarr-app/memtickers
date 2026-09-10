@@ -13,7 +13,7 @@ class StickerDatabase {
     final path = p.join(docs.path, 'memtickers.db');
     _db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON;');
       },
@@ -23,12 +23,13 @@ CREATE TABLE boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   createdAt INTEGER NOT NULL,
-  isNavigationMode INTEGER NOT NULL DEFAULT 0
+  isNavigationMode INTEGER NOT NULL DEFAULT 0,
+  backgroundStyle TEXT NOT NULL DEFAULT 'minimalSurface'
 )
 ''');
         await db.rawInsert(
-          'INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode) VALUES (?, ?, ?, ?)',
-          ['default', 'Main Board', DateTime.now().millisecondsSinceEpoch, 0],
+          'INSERT OR IGNORE INTO boards (id, name, createdAt, isNavigationMode, backgroundStyle) VALUES (?, ?, ?, ?, ?)',
+          ['default', 'Main Board', DateTime.now().millisecondsSinceEpoch, 0, 'minimalSurface'],
         );
         await db.execute('''
 CREATE TABLE stickers (
@@ -150,6 +151,13 @@ CREATE TABLE IF NOT EXISTS sticker_model_tags (
           await db.execute(
             'CREATE INDEX IF NOT EXISTS idx_sticker_model_tags_stickerId ON sticker_model_tags(stickerId);',
           );
+        }
+        if (oldVersion < 7) {
+          try {
+            await db.execute(
+              "ALTER TABLE boards ADD COLUMN backgroundStyle TEXT NOT NULL DEFAULT 'minimalSurface'",
+            );
+          } catch (_) {}
         }
       },
     );
