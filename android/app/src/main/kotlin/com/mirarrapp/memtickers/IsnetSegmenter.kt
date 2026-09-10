@@ -272,6 +272,30 @@ object IsnetSegmenter {
             throw IllegalStateException("No subject found. Try another photo with a clearer foreground.")
         }
 
+        // Cache working image and uncropped mask for RefineSession
+        try {
+            val workingFile = File(context.cacheDir, "working_${UUID.randomUUID()}.jpg")
+            FileOutputStream(workingFile).use { out ->
+                workingBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            val maskBytes = ByteArray(srcW * srcH)
+            for (i in 0 until srcW * srcH) {
+                val a = if (solidInterior[i]) 255 else ((featheredMaskPixels[i] shr 24) and 0xFF)
+                maskBytes[i] = a.toByte()
+            }
+            val session = RefineSession(
+                sessionId = UUID.randomUUID().toString(),
+                originalImagePath = imagePath,
+                width = srcW,
+                height = srcH,
+                workingImagePath = workingFile.absolutePath,
+                rgbPixels = srcPixels,
+                currentMask = maskBytes.clone(),
+                initialMask = maskBytes.clone()
+            )
+            RefineSessionManager.setSession(session)
+        } catch (_: Exception) {}
+
         val cutoutBitmap = Bitmap.createBitmap(cutoutPixels, srcW, srcH, Bitmap.Config.ARGB_8888)
         if (workingBitmap != sourceBitmap) workingBitmap.recycle()
         sourceBitmap.recycle()
@@ -306,7 +330,7 @@ object IsnetSegmenter {
         destFile.absolutePath
     }
 
-    private fun fixOrientation(imagePath: String, bitmap: Bitmap): Bitmap {
+    internal fun fixOrientation(imagePath: String, bitmap: Bitmap): Bitmap {
         return try {
             val exif = ExifInterface(imagePath)
             val orientation = exif.getAttributeInt(
@@ -330,7 +354,7 @@ object IsnetSegmenter {
         }
     }
 
-    private fun computeSampleSize(rawWidth: Int, rawHeight: Int, maxTargetEdge: Int): Int {
+    internal fun computeSampleSize(rawWidth: Int, rawHeight: Int, maxTargetEdge: Int): Int {
         var sampleSize = 1
         var longest = max(rawWidth, rawHeight)
         while (longest / 2 >= maxTargetEdge) {
@@ -340,7 +364,7 @@ object IsnetSegmenter {
         return sampleSize
     }
 
-    private fun limitMaxEdge(bitmap: Bitmap, maxEdge: Int): Bitmap {
+    internal fun limitMaxEdge(bitmap: Bitmap, maxEdge: Int): Bitmap {
         val longest = max(bitmap.width, bitmap.height)
         if (longest <= maxEdge) return bitmap
         val scale = maxEdge.toFloat() / longest.toFloat()

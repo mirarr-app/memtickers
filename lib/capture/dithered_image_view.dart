@@ -260,12 +260,47 @@ class _LiquidChromeLoaderState extends State<LiquidChromeLoader>
   Duration? _lastElapsed;
   double _frame = 0;
 
+  ui.Image? _decodedImage;
+  Uint8List? _lastDecodedBytes;
+
   @override
   void initState() {
     super.initState();
     _ticker = createTicker(_onTick);
     _ticker.start();
     _preloadProgram();
+    if (widget.image == null && widget.imageBytes != null) {
+      _decodeBytes(widget.imageBytes!);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LiquidChromeLoader oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.image != null) {
+      _decodedImage?.dispose();
+      _decodedImage = null;
+      _lastDecodedBytes = null;
+    } else if (widget.imageBytes != null &&
+        widget.imageBytes != _lastDecodedBytes) {
+      _decodeBytes(widget.imageBytes!);
+    }
+  }
+
+  Future<void> _decodeBytes(Uint8List bytes) async {
+    _lastDecodedBytes = bytes;
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      _decodedImage?.dispose();
+      setState(() {
+        _decodedImage = frame.image;
+      });
+    } catch (_) {}
   }
 
   void _preloadProgram() {
@@ -318,12 +353,14 @@ class _LiquidChromeLoaderState extends State<LiquidChromeLoader>
   @override
   void dispose() {
     _ticker.dispose();
+    _decodedImage?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final program = _cachedProgram;
+    final effectiveImage = widget.image ?? _decodedImage;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -331,8 +368,8 @@ class _LiquidChromeLoaderState extends State<LiquidChromeLoader>
         final availH = constraints.maxHeight;
 
         double imgAspect = 1.0;
-        if (widget.image != null && widget.image!.height > 0) {
-          imgAspect = widget.image!.width / widget.image!.height;
+        if (effectiveImage != null && effectiveImage.height > 0) {
+          imgAspect = effectiveImage.width / effectiveImage.height;
         }
 
         double renderedW;
@@ -361,9 +398,9 @@ class _LiquidChromeLoaderState extends State<LiquidChromeLoader>
                 fit: StackFit.expand,
                 children: [
                   // Base Image
-                  if (widget.image != null)
+                  if (effectiveImage != null)
                     RawImage(
-                      image: widget.image!,
+                      image: effectiveImage,
                       fit: BoxFit.contain,
                     )
                   else if (widget.imageBytes != null)
@@ -373,11 +410,11 @@ class _LiquidChromeLoaderState extends State<LiquidChromeLoader>
                     ),
 
                   // Active Animated Liquid Chrome Shader
-                  if (widget.image != null && program != null)
+                  if (effectiveImage != null && program != null)
                     CustomPaint(
                       painter: _LiquidChromePainter(
                         program: program,
-                        image: widget.image!,
+                        image: effectiveImage,
                         uniforms: _buildUniforms(_frame),
                         sizing: sizing,
                         frame: _frame,

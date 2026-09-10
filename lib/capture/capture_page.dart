@@ -21,8 +21,10 @@ import 'dithered_image_view.dart';
 import 'memory_metadata.dart';
 import 'metadata_service.dart';
 import 'segmentation_service.dart';
+import 'isnet_cutout.dart';
 import 'stamp_overlay.dart';
 import 'sticker_processor.dart';
+import 'sticker_refine_page.dart';
 
 class CaptureResult {
   const CaptureResult({required this.sticker, required this.pngBytes});
@@ -108,6 +110,7 @@ class _CapturePageState extends State<CapturePage>
   int _processGeneration = 0;
   ui.Image? _sourceUiImage;
   Uint8List? _sourceImageBytes;
+  String? _lastSourceFilePath;
 
   // Stamp Controls
   final TextEditingController _stampController = TextEditingController();
@@ -398,6 +401,7 @@ class _CapturePageState extends State<CapturePage>
       _takingPicture = false;
       _sourceUiImage = sourceUiImage;
       _sourceImageBytes = rawBytes;
+      _lastSourceFilePath = file.path;
       _status = null;
       _previewPng = null;
       _selectedTags.clear();
@@ -532,6 +536,96 @@ class _CapturePageState extends State<CapturePage>
     }
   }
 
+  Future<void> _openOutlineEditor() async {
+    final settings = widget.repository.settings;
+    AppHaptics.selection();
+    final result = await Navigator.of(context).push<RefineCropResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (ctx) => StickerRefinePage(
+          imagePath: _lastSourceFilePath,
+          saturation: settings.saturation,
+          brightness: settings.brightness,
+          processor: _processor,
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final gen = ++_processGeneration;
+      final croppedFile = File(result.path);
+      final croppedBytes = await croppedFile.readAsBytes();
+
+      ui.Image? croppedUiImage;
+      try {
+        final codec = await ui.instantiateImageCodec(croppedBytes);
+        final frame = await codec.getNextFrame();
+        croppedUiImage = frame.image;
+      } catch (_) {}
+
+      if (!mounted || _processGeneration != gen) {
+        croppedUiImage?.dispose();
+        return;
+      }
+
+      // Transition immediately to the processing phase with shader loader so
+      // the old sticker is never shown while the new vinyl border calculates.
+      _sourceUiImage?.dispose();
+      setState(() {
+        _phase = CapturePhase.processing;
+        _previewPng = null;
+        _busy = true;
+        _status = 'Applying vinyl border…';
+        _sourceUiImage = croppedUiImage;
+        _sourceImageBytes = croppedBytes;
+      });
+
+      final newDieCut = await _processor.dieCut(
+        croppedBytes,
+        saturation: settings.saturation,
+        brightness: settings.brightness,
+      );
+      try {
+        await croppedFile.delete();
+      } catch (_) {}
+
+      if (!mounted || _processGeneration != gen) {
+        croppedUiImage?.dispose();
+        return;
+      }
+
+      int pixelW = 0;
+      int pixelH = 0;
+      try {
+        final codec = await ui.instantiateImageCodec(newDieCut);
+        final frame = await codec.getNextFrame();
+        pixelW = frame.image.width;
+        pixelH = frame.image.height;
+        frame.image.dispose();
+      } catch (_) {}
+
+      setState(() {
+        _phase = CapturePhase.preview;
+        _previewPng = newDieCut;
+        _stickerPixelWidth = pixelW;
+        _stickerPixelHeight = pixelH;
+        _busy = false;
+        _status = null;
+      });
+      _previewEntranceController.forward(from: 0.0);
+      AppHaptics.success();
+
+      final currentSource = croppedUiImage;
+      Future.delayed(const Duration(milliseconds: 750), () {
+        if (!mounted || _processGeneration != gen) return;
+        currentSource?.dispose();
+        if (_sourceUiImage == currentSource) {
+          _sourceUiImage = null;
+        }
+      });
+    }
+  }
+
   Future<void> _keep() async {
     final png = _previewPng;
     final meta = _pendingMeta;
@@ -586,12 +680,14 @@ class _CapturePageState extends State<CapturePage>
     await widget.repository.save(sticker);
     // Asynchronously generate AI model tags in the background now that the sticker is placed & saved
     unawaited(widget.repository.generateModelTags(id));
+    unawaited(IsnetCutout.disposeRefineSession(''));
     if (!mounted) return;
     Navigator.of(context).pop(CaptureResult(sticker: sticker, pngBytes: finalBytes));
   }
 
   Future<void> _retake() async {
     final wasFromGallery = _isFromGallery;
+    unawaited(IsnetCutout.disposeRefineSession(''));
     try {
       await _camera?.resumePreview();
     } catch (_) {}
@@ -679,6 +775,7 @@ class _CapturePageState extends State<CapturePage>
     _sourceUiImage = null;
     _camera?.dispose();
     unawaited(_segmenter.dispose());
+    unawaited(IsnetCutout.disposeRefineSession(''));
     super.dispose();
   }
 
@@ -1286,6 +1383,18 @@ class _CapturePageState extends State<CapturePage>
                   ),
                   const SizedBox(width: MdSpacing.xs),
                   Expanded(
+                    child: M3EFilledButton.tonalIcon(
+                      size: M3EButtonSize.sm,
+                      onPressed: _openOutlineEditor,
+                      icon: const Icon(
+                        Icons.auto_fix_high_rounded,
+                        size: 18,
+                      ),
+                      label: const Text('Refine'),
+                    ),
+                  ),
+                  const SizedBox(width: MdSpacing.xs),
+                  Expanded(
                     child: M3EFilledButton.icon(
                       size: M3EButtonSize.sm,
                       onPressed: _keep,
@@ -1293,7 +1402,7 @@ class _CapturePageState extends State<CapturePage>
                         Icons.check_rounded,
                         size: 18,
                       ),
-                      label: const Text('Keep sticker'),
+                      label: const Text('Keep'),
                     ),
                   ),
                 ],
