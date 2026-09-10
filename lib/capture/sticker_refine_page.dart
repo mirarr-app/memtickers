@@ -936,7 +936,7 @@ class _StickerRefinePageState extends State<StickerRefinePage> {
                   child: Slider(
                     value: _brushRadius,
                     min: 8.0,
-                    max: 75.0,
+                    max: 120.0,
                     onChanged: (val) {
                       setState(() => _brushRadius = val);
                     },

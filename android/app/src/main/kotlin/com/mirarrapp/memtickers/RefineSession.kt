@@ -31,8 +31,8 @@ class RefineSession(
     private val undoStack = ArrayDeque<ByteArray>()
     private val redoStack = ArrayDeque<ByteArray>()
 
-    // Sobel gradient magnitudes [0, 1] precomputed for fast edge snapping
-    val gradients: FloatArray = computeSobelGradients(rgbPixels, width, height)
+    // Perceptual macro color gradients [0, 1] precomputed for fast edge snapping
+    val gradients: FloatArray = computeMacroGradients(rgbPixels, width, height)
 
     val canUndo: Boolean get() = undoStack.isNotEmpty()
     val canRedo: Boolean get() = redoStack.isNotEmpty()
@@ -74,19 +74,229 @@ class RefineSession(
         if (points.isEmpty() || radius <= 0f) return false
         pushHistory()
 
-        val rClamped = radius.coerceIn(2f, 150f)
-        val stepSize = max(2.0f, rClamped * 0.32f)
+        val rClamped = radius.coerceIn(4f, 150f)
 
-        if (points.size == 1) {
-            val pt = points[0]
-            if (isSmart) {
-                applySmartCenter(pt.first, pt.second, rClamped, isRestore)
-            } else {
-                applyManualCenter(pt.first, pt.second, rClamped, isRestore)
-            }
-            return true
+        if (isSmart) {
+            applySmartStroke(points, rClamped, isRestore)
+        } else {
+            applyManualStroke(points, rClamped, isRestore)
         }
 
+        return true
+    }
+
+    private fun applyManualStroke(
+        points: List<Pair<Float, Float>>,
+        radius: Float,
+        isRestore: Boolean
+    ) {
+        val targetVal = if (isRestore) 255.toByte() else 0.toByte()
+        val dense = interpolatePoints(points, max(2.0f, radius * 0.35f))
+        val rSq = radius * radius
+
+        for (pt in dense) {
+            val cx = pt.first
+            val cy = pt.second
+            val minX = max(0, (cx - radius).toInt())
+            val maxX = min(width - 1, (cx + radius).toInt())
+            val minY = max(0, (cy - radius).toInt())
+            val maxY = min(height - 1, (cy + radius).toInt())
+
+            for (y in minY..maxY) {
+                val row = y * width
+                val dy = y - cy
+                val dySq = dy * dy
+                for (x in minX..maxX) {
+                    val dx = x - cx
+                    if (dx * dx + dySq <= rSq) {
+                        currentMask[row + x] = targetVal
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applySmartStroke(
+        points: List<Pair<Float, Float>>,
+        radius: Float,
+        isRestore: Boolean
+    ) {
+        val targetVal = if (isRestore) 255.toByte() else 0.toByte()
+        val dense = interpolatePoints(points, stepSize = 2.0f)
+        if (dense.isEmpty()) return
+
+        val reach = (radius * 1.30f).roundToInt()
+        var minX = width - 1
+        var maxX = 0
+        var minY = height - 1
+        var maxY = 0
+
+        for (pt in dense) {
+            val ix = pt.first.toInt()
+            val iy = pt.second.toInt()
+            if (ix < minX) minX = ix
+            if (ix > maxX) maxX = ix
+            if (iy < minY) minY = iy
+            if (iy > maxY) maxY = iy
+        }
+
+        minX = max(0, minX - reach)
+        maxX = min(width - 1, maxX + reach)
+        minY = max(0, minY - reach)
+        maxY = min(height - 1, maxY + reach)
+
+        // Sample color characteristics along the user's stroke
+        var sumR = 0L
+        var sumG = 0L
+        var sumB = 0L
+        val count = dense.size
+        for (pt in dense) {
+            val px = pt.first.roundToInt().coerceIn(0, width - 1)
+            val py = pt.second.roundToInt().coerceIn(0, height - 1)
+            val c = rgbPixels[py * width + px]
+            sumR += (c shr 16) and 0xFF
+            sumG += (c shr 8) and 0xFF
+            sumB += c and 0xFF
+        }
+        val avgR = (sumR / count).toInt()
+        val avgG = (sumG / count).toInt()
+        val avgB = (sumB / count).toInt()
+
+        var maxStrokeVar = 0f
+        for (pt in dense) {
+            val px = pt.first.roundToInt().coerceIn(0, width - 1)
+            val py = pt.second.roundToInt().coerceIn(0, height - 1)
+            val c = rgbPixels[py * width + px]
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val d = colorDistance(r, g, b, avgR, avgG, avgB)
+            if (d > maxStrokeVar) maxStrokeVar = d
+        }
+
+        // Adaptive color barrier: allows natural variations inside the stroked object (e.g. shadowed skin, buttons),
+        // but blocks transitions into background colors.
+        val colorBarrierThreshold = max(68.0f, min(145.0f, maxStrokeVar * 1.6f))
+        val edgeThreshold = 0.15f
+
+        val coreRadius = max(3.5f, radius * 0.40f)
+        val coreRadiusSq = coreRadius * coreRadius
+        val maxRadiusSq = (radius * 1.25f) * (radius * 1.25f)
+
+        // Build stroke segments
+        val segs = ArrayList<StrokeSegment>(max(1, points.size - 1))
+        if (points.size == 1) {
+            segs.add(StrokeSegment(points[0].first, points[0].second, points[0].first, points[0].second, reach.toFloat()))
+        } else {
+            for (i in 0 until points.size - 1) {
+                segs.add(StrokeSegment(points[i].first, points[i].second, points[i + 1].first, points[i + 1].second, reach.toFloat()))
+            }
+        }
+
+        for (y in minY..maxY) {
+            val row = y * width
+            for (x in minX..maxX) {
+                var bestDistSq = Float.MAX_VALUE
+                var bestProjX = x.toFloat()
+                var bestProjY = y.toFloat()
+
+                for (s in segs) {
+                    if (x < s.minX || x > s.maxX || y < s.minY || y > s.maxY) continue
+                    val (dSq, px, py) = s.project(x.toFloat(), y.toFloat())
+                    if (dSq < bestDistSq) {
+                        bestDistSq = dSq
+                        bestProjX = px
+                        bestProjY = py
+                        if (dSq <= coreRadiusSq) break
+                    }
+                }
+
+                // 1. Core zone: unconditionally marked (handles buttons, stitches, seams, skin creases)
+                if (bestDistSq <= coreRadiusSq) {
+                    currentMask[row + x] = targetVal
+                    continue
+                }
+
+                // Outside outer reach
+                if (bestDistSq > maxRadiusSq) continue
+
+                // 2. Smart fringe zone: snap to the physical contour without bleeding across
+                val refIx = bestProjX.roundToInt().coerceIn(0, width - 1)
+                val refIy = bestProjY.roundToInt().coerceIn(0, height - 1)
+                val refColor = rgbPixels[refIy * width + refIx]
+                val refR = (refColor shr 16) and 0xFF
+                val refG = (refColor shr 8) and 0xFF
+                val refB = refColor and 0xFF
+
+                val currColor = rgbPixels[row + x]
+                val currR = (currColor shr 16) and 0xFF
+                val currG = (currColor shr 8) and 0xFF
+                val currB = currColor and 0xFF
+                val currDelta = colorDistance(currR, currG, currB, refR, refG, refB)
+
+                if (currDelta > colorBarrierThreshold * 1.30f) continue
+
+                // Ray trace from core boundary toward (x, y)
+                val dist = sqrt(bestDistSq)
+                val steps = max(2, ((dist - coreRadius) / 2.0f).toInt())
+                var crossedBoundary = false
+
+                for (st in 1..steps) {
+                    val t = (coreRadius + (dist - coreRadius) * (st.toFloat() / steps)) / dist
+                    val sx = (bestProjX + (x - bestProjX) * t).roundToInt().coerceIn(0, width - 1)
+                    val sy = (bestProjY + (y - bestProjY) * t).roundToInt().coerceIn(0, height - 1)
+                    val sIdx = sy * width + sx
+
+                    val grad = gradients[sIdx]
+                    if (grad >= edgeThreshold) {
+                        val sc = rgbPixels[sIdx]
+                        val sr = (sc shr 16) and 0xFF
+                        val sg = (sc shr 8) and 0xFF
+                        val sb = sc and 0xFF
+                        val sDelta = colorDistance(sr, sg, sb, refR, refG, refB)
+                        if (sDelta >= colorBarrierThreshold * 0.70f) {
+                            crossedBoundary = true
+                            break
+                        }
+                    }
+                }
+
+                if (!crossedBoundary) {
+                    currentMask[row + x] = targetVal
+                }
+            }
+        }
+    }
+
+    private class StrokeSegment(val ax: Float, val ay: Float, val bx: Float, val by: Float, reach: Float) {
+        val dx = bx - ax
+        val dy = by - ay
+        val lenSq = dx * dx + dy * dy
+        val minX = min(ax, bx) - reach
+        val maxX = max(ax, bx) + reach
+        val minY = min(ay, by) - reach
+        val maxY = max(ay, by) + reach
+
+        fun project(px: Float, py: Float): Triple<Float, Float, Float> {
+            if (lenSq < 1e-4f) {
+                val ex = px - ax
+                val ey = py - ay
+                return Triple(ex * ex + ey * ey, ax, ay)
+            }
+            val t = (((px - ax) * dx + (py - ay) * dy) / lenSq).coerceIn(0f, 1f)
+            val projX = ax + t * dx
+            val projY = ay + t * dy
+            val ex = px - projX
+            val ey = py - projY
+            return Triple(ex * ex + ey * ey, projX, projY)
+        }
+    }
+
+    private fun interpolatePoints(points: List<Pair<Float, Float>>, stepSize: Float): List<Pair<Float, Float>> {
+        if (points.isEmpty()) return emptyList()
+        if (points.size == 1) return points
+
+        val result = ArrayList<Pair<Float, Float>>()
         for (i in 0 until points.size - 1) {
             val p0 = points[i]
             val p1 = points[i + 1]
@@ -95,130 +305,13 @@ class RefineSession(
             val dist = sqrt(dx * dx + dy * dy)
             val steps = max(1, (dist / stepSize).roundToInt())
 
-            for (s in 0..steps) {
+            for (s in 0 until steps) {
                 val t = s.toFloat() / steps
-                val cx = p0.first + dx * t
-                val cy = p0.second + dy * t
-
-                if (isSmart) {
-                    applySmartCenter(cx, cy, rClamped, isRestore)
-                } else {
-                    applyManualCenter(cx, cy, rClamped, isRestore)
-                }
+                result.add(Pair(p0.first + dx * t, p0.second + dy * t))
             }
         }
-
-        return true
-    }
-
-    private fun applyManualCenter(cx: Float, cy: Float, radius: Float, isRestore: Boolean) {
-        val rInt = radius.roundToInt().coerceAtLeast(1)
-        val minX = max(0, (cx - radius).toInt())
-        val maxX = min(width - 1, (cx + radius).toInt())
-        val minY = max(0, (cy - radius).toInt())
-        val maxY = min(height - 1, (cy + radius).toInt())
-        val rSq = radius * radius
-        val targetVal = if (isRestore) 255.toByte() else 0.toByte()
-
-        for (y in minY..maxY) {
-            val row = y * width
-            val dy = y - cy
-            val dySq = dy * dy
-            for (x in minX..maxX) {
-                val dx = x - cx
-                if (dx * dx + dySq <= rSq) {
-                    currentMask[row + x] = targetVal
-                }
-            }
-        }
-    }
-
-    private fun applySmartCenter(cx: Float, cy: Float, radius: Float, isRestore: Boolean) {
-        val rInt = radius.roundToInt().coerceAtLeast(1)
-        val minX = max(0, (cx - radius).toInt())
-        val maxX = min(width - 1, (cx + radius).toInt())
-        val minY = max(0, (cy - radius).toInt())
-        val maxY = min(height - 1, (cy + radius).toInt())
-        val rSq = radius * radius
-
-        val centerIdxX = cx.roundToInt().coerceIn(0, width - 1)
-        val centerIdxY = cy.roundToInt().coerceIn(0, height - 1)
-
-        // Find local maximum gradient within brush window
-        var localMaxGrad = 0f
-        for (y in minY..maxY) {
-            val row = y * width
-            for (x in minX..maxX) {
-                val g = gradients[row + x]
-                if (g > localMaxGrad) localMaxGrad = g
-            }
-        }
-
-        // If very low contrast throughout, fall back to smooth circle
-        if (localMaxGrad < 0.12f) {
-            applyManualCenter(cx, cy, radius, isRestore)
-            return
-        }
-
-        // Edge threshold: snaps to strong physical edges without crossing
-        val edgeThreshold = max(0.11f, localMaxGrad * 0.48f)
-        val targetVal = if (isRestore) 255.toByte() else 0.toByte()
-
-        val boxW = maxX - minX + 1
-        val boxH = maxY - minY + 1
-        val totalBox = boxW * boxH
-
-        val visited = BooleanArray(totalBox)
-        val queue = IntArray(totalBox)
-        var head = 0
-        var tail = 0
-
-        val startLocal = (centerIdxY - minY) * boxW + (centerIdxX - minX)
-        visited[startLocal] = true
-        queue[tail++] = (centerIdxY shl 16) or centerIdxX
-
-        while (head < tail) {
-            val packed = queue[head++]
-            val px = packed and 0xFFFF
-            val py = (packed ushr 16) and 0xFFFF
-
-            val dx = px - cx
-            val dy = py - cy
-            if (dx * dx + dy * dy <= rSq) {
-                currentMask[py * width + px] = targetVal
-            }
-
-            // 4-connected neighbors
-            val nxList = intArrayOf(px - 1, px + 1, px, px)
-            val nyList = intArrayOf(py, py, py - 1, py + 1)
-
-            for (k in 0 until 4) {
-                val nx = nxList[k]
-                val ny = nyList[k]
-
-                if (nx in minX..maxX && ny in minY..maxY) {
-                    val nLocal = (ny - minY) * boxW + (nx - minX)
-                    if (!visited[nLocal]) {
-                        visited[nLocal] = true
-                        val ndx = nx - cx
-                        val ndy = ny - cy
-                        val inCircle = ndx * ndx + ndy * ndy <= rSq
-
-                        val nGrad = gradients[ny * width + nx]
-                        if (nGrad >= edgeThreshold) {
-                            // Boundary pixel: include in target but DO NOT expand through it
-                            if (inCircle) {
-                                currentMask[ny * width + nx] = targetVal
-                            }
-                        } else {
-                            if (inCircle) {
-                                queue[tail++] = (ny shl 16) or nx
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        result.add(points.last())
+        return result
     }
 
     private var overlayVersion = 0
@@ -382,41 +475,102 @@ class RefineSession(
     }
 
     companion object {
-        fun computeSobelGradients(rgbPixels: IntArray, width: Int, height: Int): FloatArray {
+        fun colorDistance(r1: Int, g1: Int, b1: Int, r2: Int, g2: Int, b2: Int): Float {
+            val dr = r1 - r2
+            val dg = g1 - g2
+            val db = b1 - b2
+            // Perceptually weighted Euclidean color distance
+            return sqrt((2 * dr * dr + 4 * dg * dg + 3 * db * db).toFloat())
+        }
+
+        fun computeMacroGradients(rgbPixels: IntArray, width: Int, height: Int): FloatArray {
             val total = width * height
-            val lum = FloatArray(total)
-            for (i in 0 until total) {
-                val c = rgbPixels[i]
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-                lum[i] = 0.299f * r + 0.587f * g + 0.114f * b
+            val grads = FloatArray(total)
+
+            // 1. Fast separable 5-tap Gaussian pre-smoothing: [1, 4, 6, 4, 1] / 16
+            // Removes sensor noise, cloth weave, and pore textures while preserving macro object edges
+            val tempR = IntArray(total)
+            val tempG = IntArray(total)
+            val tempB = IntArray(total)
+
+            val smoothR = IntArray(total)
+            val smoothG = IntArray(total)
+            val smoothB = IntArray(total)
+
+            // Horizontal pass
+            for (y in 0 until height) {
+                val row = y * width
+                for (x in 0 until width) {
+                    val xm2 = (x - 2).coerceIn(0, width - 1)
+                    val xm1 = (x - 1).coerceIn(0, width - 1)
+                    val xp1 = (x + 1).coerceIn(0, width - 1)
+                    val xp2 = (x + 2).coerceIn(0, width - 1)
+
+                    val c0 = rgbPixels[row + xm2]
+                    val c1 = rgbPixels[row + xm1]
+                    val c2 = rgbPixels[row + x]
+                    val c3 = rgbPixels[row + xp1]
+                    val c4 = rgbPixels[row + xp2]
+
+                    val r = (((c0 shr 16) and 0xFF) + (((c1 shr 16) and 0xFF) shl 2) + (((c2 shr 16) and 0xFF) * 6) + (((c3 shr 16) and 0xFF) shl 2) + ((c4 shr 16) and 0xFF)) shr 4
+                    val g = (((c0 shr 8) and 0xFF) + (((c1 shr 8) and 0xFF) shl 2) + (((c2 shr 8) and 0xFF) * 6) + (((c3 shr 8) and 0xFF) shl 2) + ((c4 shr 8) and 0xFF)) shr 4
+                    val b = ((c0 and 0xFF) + ((c1 and 0xFF) shl 2) + ((c2 and 0xFF) * 6) + ((c3 and 0xFF) shl 2) + (c4 and 0xFF)) shr 4
+
+                    val idx = row + x
+                    tempR[idx] = r
+                    tempG[idx] = g
+                    tempB[idx] = b
+                }
             }
 
-            val grads = FloatArray(total)
+            // Vertical pass
+            for (x in 0 until width) {
+                for (y in 0 until height) {
+                    val ym2 = (y - 2).coerceIn(0, height - 1) * width + x
+                    val ym1 = (y - 1).coerceIn(0, height - 1) * width + x
+                    val y0  = y * width + x
+                    val yp1 = (y + 1).coerceIn(0, height - 1) * width + x
+                    val yp2 = (y + 2).coerceIn(0, height - 1) * width + x
+
+                    smoothR[y0] = (tempR[ym2] + (tempR[ym1] shl 2) + tempR[y0] * 6 + (tempR[yp1] shl 2) + tempR[yp2]) shr 4
+                    smoothG[y0] = (tempG[ym2] + (tempG[ym1] shl 2) + tempG[y0] * 6 + (tempG[yp1] shl 2) + tempG[yp2]) shr 4
+                    smoothB[y0] = (tempB[ym2] + (tempB[ym1] shl 2) + tempB[y0] * 6 + (tempB[yp1] shl 2) + tempB[yp2]) shr 4
+                }
+            }
+
+            // 2. Central difference on smoothed color channels
             for (y in 1 until height - 1) {
                 val rowPrev = (y - 1) * width
                 val rowCurr = y * width
                 val rowNext = (y + 1) * width
+
                 for (x in 1 until width - 1) {
-                    val p00 = lum[rowPrev + x - 1]
-                    val p01 = lum[rowPrev + x]
-                    val p02 = lum[rowPrev + x + 1]
+                    val idxL = rowCurr + x - 1
+                    val idxR = rowCurr + x + 1
+                    val idxU = rowPrev + x
+                    val idxD = rowNext + x
 
-                    val p10 = lum[rowCurr + x - 1]
-                    val p12 = lum[rowCurr + x + 1]
+                    val drX = smoothR[idxR] - smoothR[idxL]
+                    val drY = smoothR[idxD] - smoothR[idxU]
 
-                    val p20 = lum[rowNext + x - 1]
-                    val p21 = lum[rowNext + x]
-                    val p22 = lum[rowNext + x + 1]
+                    val dgX = smoothG[idxR] - smoothG[idxL]
+                    val dgY = smoothG[idxD] - smoothG[idxU]
 
-                    val gx = (p02 + 2f * p12 + p22) - (p00 + 2f * p10 + p20)
-                    val gy = (p20 + 2f * p21 + p22) - (p00 + 2f * p01 + p02)
-                    val mag = sqrt(gx * gx + gy * gy) / 1442.22f
+                    val dbX = smoothB[idxR] - smoothB[idxL]
+                    val dbY = smoothB[idxD] - smoothB[idxU]
+
+                    val magX2 = 2 * drX * drX + 4 * dgX * dgX + 3 * dbX * dbX
+                    val magY2 = 2 * drY * drY + 4 * dgY * dgY + 3 * dbY * dbY
+                    val mag = sqrt((magX2 + magY2).toFloat()) / 765.0f
                     grads[rowCurr + x] = mag.coerceIn(0.0f, 1.0f)
                 }
             }
+
             return grads
+        }
+
+        fun computeSobelGradients(rgbPixels: IntArray, width: Int, height: Int): FloatArray {
+            return computeMacroGradients(rgbPixels, width, height)
         }
     }
 }
