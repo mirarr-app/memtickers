@@ -35,16 +35,16 @@ void main() {
     test('Presets provide distinct valid configurations', () {
       expect(FlutedGlassShaderConfig.presetWaves.shape, FlutedGlassShape.wave);
       expect(FlutedGlassShaderConfig.presetWaves.distortionShape,
-          FlutedGlassDistortionShape.contour);
+          FlutedGlassDistortionShape.lens);
 
       expect(FlutedGlassShaderConfig.presetAbstract.shape,
           FlutedGlassShape.linesIrregular);
       expect(FlutedGlassShaderConfig.presetAbstract.distortionShape,
-          FlutedGlassDistortionShape.flat);
+          FlutedGlassDistortionShape.cascade);
 
       expect(FlutedGlassShaderConfig.presetFolds.shape, FlutedGlassShape.zigzag);
       expect(FlutedGlassShaderConfig.presetFolds.distortionShape,
-          FlutedGlassDistortionShape.cascade);
+          FlutedGlassDistortionShape.flat);
     });
 
     test('uniforms packing matches fluted_glass.frag specification', () {
@@ -84,6 +84,93 @@ void main() {
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
       expect(a, isNot(equals(c)));
+    });
+  });
+
+  group('All Shaders Config unit tests', () {
+    test('HalftoneDotsShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = HalftoneDotsShaderConfig.presetDefault;
+      expect(config.radius, 1.25);
+      expect(config.contrast, 0.4);
+      expect(config.size, 0.5);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(HalftoneDotsShaderConfig.presetLedScreen.grid, HalftoneDotsGrid.square);
+      expect(HalftoneDotsShaderConfig.presetMosaic.originalColors, isTrue);
+      expect(HalftoneDotsShaderConfig.presetRoundSquare.inverted, isTrue);
+    });
+
+    test('HalftoneCmykShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = HalftoneCmykShaderConfig.presetDefault;
+      expect(config.size, 0.2);
+      expect(config.contrast, 1.0);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(HalftoneCmykShaderConfig.presetSharpDots.type, HalftoneCmykType.dots);
+      expect(HalftoneCmykShaderConfig.presetVintagePrint.type, HalftoneCmykType.ink);
+    });
+
+    test('ImageDitheringShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = ImageDitheringShaderConfig.presetDefault;
+      expect(config.type, ImageDitheringType.bayer8x8);
+      expect(config.size, 2.0);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(ImageDitheringShaderConfig.presetNoise.type, ImageDitheringType.random);
+      expect(ImageDitheringShaderConfig.presetRetroBayer.type, ImageDitheringType.bayer2x2);
+      expect(ImageDitheringShaderConfig.presetOriginalColors.originalColors, isTrue);
+    });
+
+    test('PaperTextureShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = PaperTextureShaderConfig.presetDefault;
+      expect(config.contrast, 0.3);
+      expect(config.roughness, 0.4);
+      expect(config.folds, 0.65);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(PaperTextureShaderConfig.presetCardboard.roughness, 0.6);
+      expect(PaperTextureShaderConfig.presetFoldedNote.foldCount, 4.0);
+    });
+
+    test('HeatmapShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = HeatmapShaderConfig.presetDefault;
+      expect(config.innerGlow, 0.5);
+      expect(config.contour, 0.5);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(HeatmapShaderConfig.presetSepia.noise, 0.75);
+      expect(HeatmapShaderConfig.presetCyberThermal.contour, 0.8);
+    });
+
+    test('WaterShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = WaterShaderConfig.presetDefault;
+      expect(config.highlights, 0.07);
+      expect(config.layering, 0.5);
+      expect(config.waves, 0.3);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(WaterShaderConfig.presetSlowMo.caustic, 0.2);
+      expect(WaterShaderConfig.presetAbstract.edges, 1.0);
+    });
+
+    test('LiquidMetalShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = LiquidMetalShaderConfig.presetDefault;
+      expect(config.softness, 0.1);
+      expect(config.distortion, 0.07);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(LiquidMetalShaderConfig.presetChrome.shape, LiquidMetalShape.none);
+      expect(LiquidMetalShaderConfig.presetMoltenRipples.shape, LiquidMetalShape.circle);
+    });
+
+    test('GemSmokeShaderConfig has valid defaults, presets, and uniforms', () {
+      const config = GemSmokeShaderConfig.presetDefault;
+      expect(config.innerDistortion, 0.8);
+      expect(config.outerDistortion, 0.6);
+      expect(config.uniforms.isNotEmpty, isTrue);
+
+      expect(GemSmokeShaderConfig.presetFire.innerDistortion, 0.6);
+      expect(GemSmokeShaderConfig.presetFluorescent.innerDistortion, 1.0);
     });
   });
 
@@ -254,9 +341,91 @@ void main() {
         FlutterError.onError = oldOnError;
 
         expect(caughtDetails, isNull);
-        expect(find.text('Shaders'), findsOneWidget);
+        expect(find.text('Shaders: Fluted Glass'), findsOneWidget);
         expect(find.text('Fluted Glass'), findsOneWidget);
       }
+    });
+
+    testWidgets('Switching shader types shows respective controls and presets',
+        (tester) async {
+      var currentSettings = const ShareShaderSettings(
+        type: ShareShaderType.halftoneDots,
+      );
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            return MaterialApp(
+              home: Scaffold(
+                body: ShareShaderControlsSheet(
+                  settings: currentSettings,
+                  onSettingsChanged: (s) {
+                    setState(() {
+                      currentSettings = s;
+                    });
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Halftone dots controls
+      expect(find.text('radius'), findsOneWidget);
+      expect(find.text('contrast'), findsOneWidget);
+      expect(find.text('LED screen'), findsOneWidget);
+
+      final typeSelectorScrollable = find.descendant(
+        of: find.byType(ListView).first,
+        matching: find.byType(Scrollable),
+      );
+
+      // Switch to Water
+      await tester.scrollUntilVisible(
+        find.text('Water'),
+        150.0,
+        scrollable: typeSelectorScrollable,
+      );
+      await tester.ensureVisible(find.text('Water'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Water'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('highlights'), findsOneWidget);
+      expect(find.text('waves'), findsOneWidget);
+      expect(find.text('Slow-mo'), findsOneWidget);
+
+      // Switch to Dithering
+      await tester.scrollUntilVisible(
+        find.text('Dithering'),
+        150.0,
+        scrollable: typeSelectorScrollable,
+      );
+      await tester.ensureVisible(find.text('Dithering'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Dithering'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('pixelSize'), findsOneWidget);
+      expect(find.text('colorSteps'), findsOneWidget);
+      expect(find.text('Noise (1-bit)'), findsOneWidget);
+
+      // Switch to Paper Texture
+      await tester.scrollUntilVisible(
+        find.text('Paper Texture'),
+        150.0,
+        scrollable: typeSelectorScrollable,
+      );
+      await tester.ensureVisible(find.text('Paper Texture'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paper Texture'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('roughness'), findsOneWidget);
+      expect(find.text('crumples'), findsOneWidget);
+      expect(find.text('Cardboard'), findsOneWidget);
     });
   });
 }

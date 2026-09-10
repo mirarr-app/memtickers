@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:m3e_core/m3e_core.dart';
-import 'package:paper_shaders/paper_shaders.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -50,7 +50,8 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
 
   late final SnapshotController _shaderSnapshotController;
   ShareShaderSettings _shaderSettings = const ShareShaderSettings();
-  ui.FragmentProgram? _flutedGlassProgram;
+  final Map<ShareShaderType, ui.FragmentProgram?> _shaderPrograms = {};
+  ui.Image? _noiseTexture;
 
   @override
   void initState() {
@@ -65,16 +66,29 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
   }
 
   Future<void> _loadShaderPrograms() async {
-    try {
-      final program =
-          await ui.FragmentProgram.fromAsset(FlutedGlassShader.assetKey);
-      if (mounted) {
-        setState(() {
-          _flutedGlassProgram = program;
-        });
+    for (final type in ShareShaderType.values) {
+      if (type.assetKey.isEmpty) continue;
+      try {
+        final program = await ui.FragmentProgram.fromAsset(type.assetKey);
+        _shaderPrograms[type] = program;
+      } catch (e) {
+        debugPrint('Error loading shader ${type.label}: $e');
       }
+    }
+
+    try {
+      final byteData =
+          await rootBundle.load('packages/paper_shaders/assets/noise.png');
+      final codec =
+          await ui.instantiateImageCodec(byteData.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      _noiseTexture = frame.image;
     } catch (e) {
-      debugPrint('Error loading fluted glass shader: $e');
+      debugPrint('Error loading shader noise texture: $e');
+    }
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -529,7 +543,8 @@ class _ShareStudioPageState extends State<ShareStudioPage> {
                 controller: _shaderSnapshotController,
                 painter: ShareCanvasShaderPainter(
                   settings: _shaderSettings,
-                  flutedGlassProgram: _flutedGlassProgram,
+                  programs: _shaderPrograms,
+                  noiseTexture: _noiseTexture,
                 ),
                 child: Stack(
                   children: [
