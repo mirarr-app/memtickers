@@ -9,6 +9,7 @@ import '../details/sticker_details_sheet.dart';
 import '../search/search_sheet.dart';
 import '../search/sticker_search_filter.dart';
 import '../settings/sticker_settings_sheet.dart';
+import '../share/share_studio_page.dart';
 import '../tags/tags_sheet.dart';
 import '../theme/app_haptics.dart';
 import '../theme/memtickers_theme.dart';
@@ -222,6 +223,16 @@ class _ScrapbookPageState extends State<ScrapbookPage>
 
   void _openSettings() {
     showStickerSettings(context: context, repository: widget.repository);
+  }
+
+  void _openShare() {
+    Navigator.of(context).push(
+      ExpressivePageRoute(
+        builder: (context) => ShareStudioPage(
+          repository: widget.repository,
+        ),
+      ),
+    );
   }
 
   @override
@@ -553,6 +564,19 @@ class _ScrapbookPageState extends State<ScrapbookPage>
                         _openTags();
                       },
                       icon: const Icon(Icons.label_outline_rounded, size: 22),
+                    ),
+                    const SizedBox(width: MdSpacing.xs),
+                    IconButton(
+                      tooltip: 'Share',
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.surfaceContainerHigh,
+                        padding: const EdgeInsets.all(MdSpacing.xs),
+                      ),
+                      onPressed: () {
+                        AppHaptics.lightImpact();
+                        _openShare();
+                      },
+                      icon: const Icon(Icons.share_outlined, size: 22),
                     ),
                     const SizedBox(width: MdSpacing.xs),
                     IconButton(

@@ -27,6 +27,9 @@ class StickerRepository extends ChangeNotifier {
   List<Sticker> get stickers =>
       List.unmodifiable(_stickers.where((s) => s.boardId == _activeBoardId));
   List<Sticker> get allStickers => List.unmodifiable(_stickers);
+
+  List<Sticker> getStickersForBoard(String boardId) =>
+      List.unmodifiable(_stickers.where((s) => s.boardId == boardId));
   List<StickerTag> get tags => List.unmodifiable(_tags);
   List<StickerBoard> get boards => List.unmodifiable(_boards);
   String get activeBoardId => _activeBoardId;
