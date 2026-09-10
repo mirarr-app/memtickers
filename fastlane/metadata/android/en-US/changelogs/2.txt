@@ -1,0 +1,4 @@
+Memtickers 1.1.0 Update!
+- New Share Studio: arrange, align, resize, and rotate stickers on screen with customizable dynamic lighting and reflections
+- Customizable board themes: choose from 6 distinct background colors and paper textures for infinite scrapbooking
+- Performance optimizations and UI polish
